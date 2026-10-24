@@ -1,4 +1,4 @@
-import type { ModelTier, StoryModelAdvice } from "@/lib/bmad/types";
+import type { ModelTier, StoryModelAdvice, StoryStatus } from "@/lib/bmad/types";
 
 export const MODEL_TIERS: ModelTier[] = ["haiku", "sonnet", "opus"];
 
@@ -10,6 +10,24 @@ export const AGENT_RUN_LABELS: Record<AgentRunKind, string> = {
   dev: "Dev",
   review: "Review",
 };
+
+/**
+ * Which actions fit a story's status: plan before there is a spec, build
+ * until it is in review, review only after it was built.
+ */
+const KINDS_BY_STATUS: Record<StoryStatus, AgentRunKind[]> = {
+  backlog: ["plan", "dev"],
+  unknown: ["plan", "dev"],
+  "ready-for-dev": ["dev"],
+  "in-progress": ["dev"],
+  blocked: ["dev"],
+  review: ["review"],
+  done: ["review"],
+};
+
+export function runKindsFor(status: StoryStatus): AgentRunKind[] {
+  return KINDS_BY_STATUS[status] ?? ["plan", "dev"];
+}
 
 /** Kinds that write the same spec and code, so two of them must not run at once. */
 export function runsConflict(a: AgentRunKind, b: AgentRunKind): boolean {

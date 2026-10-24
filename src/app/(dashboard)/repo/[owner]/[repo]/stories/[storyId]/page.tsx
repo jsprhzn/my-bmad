@@ -70,6 +70,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
         owner={owner}
         repo={repoName}
         storyId={story.id}
+        storyStatus={story.status}
         modelAdvice={story.modelAdvice}
         unavailableReason={agentsUnavailable}
         initialRuns={runsResult?.success ? runsResult.data : []}
