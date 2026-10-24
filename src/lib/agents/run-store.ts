@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import type { ModelTier } from "@/lib/bmad/types";
 import type { AgentRunKind } from "./models";
 import { formatStream, readStreamResult } from "./stream-format";
+import { agentEnvironment } from "./environment";
 
 /**
  * Agent runs: Claude Code started headless in a local project's folder.
@@ -138,9 +139,11 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
     cwd: input.localPath,
     detached: true,
     stdio: "ignore",
-    env: input.account
-      ? { ...process.env, CLAUDE_CONFIG_DIR: input.account.configDir }
-      : process.env,
+    env: agentEnvironment(
+      process.env,
+      input.account ? { CLAUDE_CONFIG_DIR: input.account.configDir } : {},
+      // Next.js types ProcessEnv with a required NODE_ENV; the agent has none.
+    ) as NodeJS.ProcessEnv,
   });
   child.unref();
 

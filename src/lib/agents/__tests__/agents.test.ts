@@ -140,3 +140,35 @@ describe("parseClaudeAccounts", () => {
     expect(parseClaudeAccounts("=x,bad name=/a,ok=/b,ok=/c").map((a) => a.name)).toEqual(["ok"]);
   });
 });
+
+describe("agentEnvironment", () => {
+  it("drops server and MyBMAD variables and keeps the user's own", async () => {
+    const { agentEnvironment } = await import("../environment");
+    const env = agentEnvironment(
+      {
+        PATH: "/usr/bin",
+        JAVA_HOME: "/jdk",
+        HTTPS_PROXY: "http://proxy",
+        PKG_EXECPATH: "/x/safe-chain",
+        npm_lifecycle_event: "dev",
+        NODE_OPTIONS: "--inspect",
+        __NEXT_PRIVATE_ORIGIN: "x",
+        DATABASE_URL: "postgres://secret",
+        BETTER_AUTH_SECRET: "secret",
+      },
+      { CLAUDE_CONFIG_DIR: "/home/.claude" },
+      new Set(["DATABASE_URL", "BETTER_AUTH_SECRET"]),
+    );
+    expect(env).toEqual({
+      PATH: "/usr/bin",
+      JAVA_HOME: "/jdk",
+      HTTPS_PROXY: "http://proxy",
+      CLAUDE_CONFIG_DIR: "/home/.claude",
+    });
+  });
+
+  it("reads keys from dotenv content", async () => {
+    const { dotenvKeys } = await import("../environment");
+    expect(dotenvKeys("# c\nA=1\nexport B = 2\n  C=\nnot a key\n")).toEqual(["A", "B", "C"]);
+  });
+});
