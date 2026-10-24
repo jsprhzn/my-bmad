@@ -29,6 +29,8 @@ Each action has a model choice, pre-filled from the project's `story-complexity.
 
 A plan and a dev run for the same story never run at the same time; they write the same spec.
 
+The card offers what fits the story's status: Plan and Start dev in Backlog, Start dev from Ready for Dev to In Progress (and when Blocked), and Start review only once the story is in Review or Done.
+
 A run is a detached `claude -p` process in the project folder. Its record, prompt and output are files in `.agent-runs/` (or `AGENT_RUNS_DIR`), so runs survive a restart of MyBMAD. The run page shows the log while it runs, the cost and turns when it ends, and a **Stop** button.
 
 ## Security

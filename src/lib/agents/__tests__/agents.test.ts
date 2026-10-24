@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { devModelFor, recommendedModel, reviewModelFor, runsConflict } from "../models";
+import {
+  devModelFor,
+  recommendedModel,
+  reviewModelFor,
+  runKindsFor,
+  runsConflict,
+} from "../models";
 import { buildAgentPrompt } from "../prompts";
 import { formatStream, readStreamResult } from "../stream-format";
 import type { StoryModelAdvice } from "@/lib/bmad/types";
@@ -27,6 +33,14 @@ describe("model choice", () => {
     expect(runsConflict("review", "review")).toBe(true);
     expect(runsConflict("plan", "review")).toBe(false);
     expect(runsConflict("dev", "review")).toBe(false);
+  });
+
+  it("offers review only after the story was built", () => {
+    expect(runKindsFor("backlog")).toEqual(["plan", "dev"]);
+    expect(runKindsFor("ready-for-dev")).toEqual(["dev"]);
+    expect(runKindsFor("in-progress")).toEqual(["dev"]);
+    expect(runKindsFor("review")).toEqual(["review"]);
+    expect(runKindsFor("done")).toEqual(["review"]);
   });
 
   it("falls back to Sonnet to build and Opus to review", () => {

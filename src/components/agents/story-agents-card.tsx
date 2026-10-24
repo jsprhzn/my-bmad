@@ -20,10 +20,11 @@ import {
   AGENT_RUN_LABELS,
   MODEL_TIERS,
   recommendedModel,
+  runKindsFor,
   type AgentRunKind,
 } from "@/lib/agents/models";
 import type { AgentRun } from "@/lib/agents/run-store";
-import type { ModelTier, StoryModelAdvice } from "@/lib/bmad/types";
+import type { ModelTier, StoryModelAdvice, StoryStatus } from "@/lib/bmad/types";
 
 const POLL_MS = 5000;
 
@@ -37,6 +38,8 @@ interface StoryAgentsCardProps {
   owner: string;
   repo: string;
   storyId: string;
+  /** Decides which actions are offered (no review before the story is built). */
+  storyStatus: StoryStatus;
   modelAdvice?: StoryModelAdvice;
   /** Why agents cannot run here, or null when they can. */
   unavailableReason: string | null;
@@ -49,6 +52,7 @@ export function StoryAgentsCard({
   owner,
   repo,
   storyId,
+  storyStatus,
   modelAdvice,
   unavailableReason,
   initialRuns,
@@ -68,6 +72,8 @@ export function StoryAgentsCard({
     if (result.success) setRuns(result.data);
   }, [owner, repo, storyId]);
 
+  const kinds = runKindsFor(storyStatus);
+  const actions = ACTIONS.filter((action) => kinds.includes(action.kind));
   const anyRunning = runs.some((r) => r.status === "running");
   useEffect(() => {
     if (!anyRunning) return;
@@ -110,7 +116,7 @@ export function StoryAgentsCard({
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-4">
-              {ACTIONS.map(({ kind, label }) => (
+              {actions.map(({ kind, label }) => (
                 <div key={kind} className="flex items-center gap-2">
                   <Select
                     value={models[kind]}
@@ -136,13 +142,15 @@ export function StoryAgentsCard({
                   </Button>
                 </div>
               ))}
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Checkbox
-                  checked={fixFindings}
-                  onCheckedChange={(checked) => setFixFindings(checked === true)}
-                />
-                Review fixes its findings
-              </label>
+              {kinds.includes("review") && (
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Checkbox
+                    checked={fixFindings}
+                    onCheckedChange={(checked) => setFixFindings(checked === true)}
+                  />
+                  Review fixes its findings
+                </label>
+              )}
             </div>
 
             {error && (
