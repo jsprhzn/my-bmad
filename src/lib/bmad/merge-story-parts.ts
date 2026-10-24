@@ -51,6 +51,7 @@ export function mergeStoryParts(stories: StoryDetail[]): StoryDetail[] {
       status: leastProgressed(parts.map((p) => p.status)),
       statusExplicit: parts.every((p) => p.statusExplicit === true),
       partCount: parts.length,
+      sourcePaths: parts.flatMap((p) => p.sourcePaths ?? []),
       epicId: parts.find((p) => p.epicId)?.epicId ?? "",
       description: parts
         .map((p, i) => {

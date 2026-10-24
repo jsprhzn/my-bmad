@@ -10,6 +10,9 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { StoryAgentsCard } from "@/components/agents/story-agents-card";
+import { agentRunsEnabled } from "@/lib/agents/run-store";
+import { listAgentRuns } from "@/actions/agent-actions";
 
 interface StoryPageProps {
   params: Promise<{ owner: string; repo: string; storyId: string }>;
@@ -32,6 +35,14 @@ export default async function StoryPage({ params }: StoryPageProps) {
   if (!story) return notFound();
 
   const storiesUrl = `/repo/${owner}/${repoName}/stories`;
+  const agentsUnavailable = !isLocal
+    ? "Agents run in a local project folder; this project comes from GitHub."
+    : !agentRunsEnabled()
+      ? "Set ENABLE_AGENT_RUNS=true in .env and restart MyBMAD to start agents from here."
+      : null;
+  const runsResult = agentsUnavailable
+    ? null
+    : await listAgentRuns({ owner, name: repoName, storyId: story.id });
 
   return (
     <div className="space-y-8 pb-8">
@@ -55,6 +66,14 @@ export default async function StoryPage({ params }: StoryPageProps) {
           </div>
         </div>
       </div>
+      <StoryAgentsCard
+        owner={owner}
+        repo={repoName}
+        storyId={story.id}
+        modelAdvice={story.modelAdvice}
+        unavailableReason={agentsUnavailable}
+        initialRuns={runsResult?.success ? runsResult.data : []}
+      />
       <StoryDetailView story={story} showHeader={false} />
     </div>
   );

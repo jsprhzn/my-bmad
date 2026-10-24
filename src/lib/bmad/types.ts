@@ -57,6 +57,8 @@ export interface StoryDetail {
   partCount?: number;
   /** Recommended model from a story-complexity table, when the project has one. */
   modelAdvice?: StoryModelAdvice;
+  /** Project-relative paths of the story's own file(s); absent for sprint-status stubs. */
+  sourcePaths?: string[];
   epicId: string;
   epicTitle?: string;
   description: string;
