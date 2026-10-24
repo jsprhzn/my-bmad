@@ -72,6 +72,43 @@ export function normalizeStoryId(raw: string): string {
     .trim();
 }
 
+/**
+ * Prefix some BMAD workflows put in front of a story key in the filename,
+ * e.g. "spec-1-2-sign-in.md" from the quick-spec / build workflow.
+ */
+export const STORY_FILE_PREFIX = /^spec[-_]/i;
+
+/**
+ * Artifacts that are named after an epic or story but are not stories
+ * themselves: "review-1-2.md", "epic-1-context.md", "retro-epic-1.md".
+ */
+export const NON_STORY_FILE_PREFIX =
+  /^(?:epic|bmad|review|reviews|retro|retrospective|deferred|context|validation)[-_]/i;
+
+export interface NumericStoryKey {
+  epicId: string;
+  /** Story number within the epic, with an optional letter suffix ("3c"). */
+  storyNum: string;
+  /** Part label when the key names one part of a story ("1", "2-5"). */
+  part?: string;
+}
+
+/**
+ * Parse a numeric story key as used in filenames and sprint-status keys:
+ * "1-2-title", "1-3c-title", "1-2-part-1-title", "1-2-parts-2-5-title".
+ */
+export function parseNumericStoryKey(key: string): NumericStoryKey | null {
+  const m = key.match(
+    /^(\d+)-(\d+[a-z]?)(?:-parts?-(\d+(?:-\d+)?))?(?=-|\.|$)/i,
+  );
+  if (!m) return null;
+  return {
+    epicId: m[1],
+    storyNum: m[2].toLowerCase(),
+    part: m[3],
+  };
+}
+
 export function normalizeAlphanumericId(raw: string): string {
   return raw.trim().toLowerCase().replace(/\//g, "-");
 }

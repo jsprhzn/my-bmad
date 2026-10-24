@@ -270,7 +270,11 @@ function FilePanel({
                 ) : parsedFile.contentType === "markdown" ? (
                   <>
                     <TableOfContents content={parsedFile.body} />
-                    <MarkdownRenderer content={parsedFile.body} />
+                    <MarkdownRenderer
+                      content={parsedFile.body}
+                      filePath={selectedPath ?? undefined}
+                      onOpenFile={handleSelect}
+                    />
                   </>
                 ) : parsedFile.contentType === "yaml" ? (
                   <CodeRenderer content={parsedFile.body} language="yaml" />

@@ -23,6 +23,40 @@ import {
 
 interface MarkdownRendererProps {
   content: string;
+  /** Path of the file being rendered; relative links resolve against it. */
+  filePath?: string;
+  /** Opens another project file, e.g. when a relative link is clicked. */
+  onOpenFile?: (path: string) => void;
+}
+
+const FileLinkContext = React.createContext<{
+  filePath?: string;
+  onOpenFile?: (path: string) => void;
+}>({});
+
+/**
+ * Resolve a relative link ("mockups/x.html", "../prd.md") against the file
+ * that contains it. Returns null for absolute, anchor-only and scheme links.
+ */
+export function resolveRelativeFileLink(
+  href: string,
+  filePath: string,
+): string | null {
+  if (!href || href.startsWith("#") || href.startsWith("/")) return null;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return null;
+  const target = decodeURI(href.split(/[?#]/)[0]);
+  if (!target) return null;
+  const parts = filePath.split("/").slice(0, -1);
+  for (const segment of target.split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") {
+      if (parts.length === 0) return null;
+      parts.pop();
+    } else {
+      parts.push(segment);
+    }
+  }
+  return parts.join("/");
 }
 
 const CALLOUT_CONFIG: Record<
@@ -168,6 +202,28 @@ function SmartLink(props: React.ComponentProps<"a">) {
   const isExternal =
     href && (href.startsWith("http://") || href.startsWith("https://"));
 
+  const { filePath, onOpenFile } = React.useContext(FileLinkContext);
+  const filePathTarget =
+    !isExternal && href && filePath && onOpenFile
+      ? resolveRelativeFileLink(href, filePath)
+      : null;
+
+  if (filePathTarget && onOpenFile) {
+    return (
+      <a
+        {...rest}
+        href={`?file=${encodeURIComponent(filePathTarget)}`}
+        onClick={(e) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+          e.preventDefault();
+          onOpenFile(filePathTarget);
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
+
   if (isExternal) {
     return (
       <a {...rest} href={href} target="_blank" rel="noopener noreferrer">
@@ -229,21 +285,31 @@ const components: Components = {
   },
 };
 
-export function MarkdownRenderer({ content }: MarkdownRendererProps) {
+export function MarkdownRenderer({
+  content,
+  filePath,
+  onOpenFile,
+}: MarkdownRendererProps) {
+  const fileLink = React.useMemo(
+    () => ({ filePath, onOpenFile }),
+    [filePath, onOpenFile],
+  );
   return (
-    <div className="prose prose-zinc dark:prose-invert max-w-none">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[
-          [rehypeSanitize, bmadSanitizeSchema],
-          rehypeSlug,
-          [rehypeAutolinkHeadings, { behavior: "prepend", properties: { className: ["autolink-heading"], ariaHidden: "true", tabIndex: -1 } }],
-          rehypeHighlight,
-        ]}
-        components={components}
-      >
-        {content}
-      </ReactMarkdown>
-    </div>
+    <FileLinkContext.Provider value={fileLink}>
+      <div className="prose prose-zinc dark:prose-invert max-w-none">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[
+            [rehypeSanitize, bmadSanitizeSchema],
+            rehypeSlug,
+            [rehypeAutolinkHeadings, { behavior: "prepend", properties: { className: ["autolink-heading"], ariaHidden: "true", tabIndex: -1 } }],
+            rehypeHighlight,
+          ]}
+          components={components}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
+    </FileLinkContext.Provider>
   );
 }
