@@ -22,7 +22,7 @@ import {
   AGENT_RUN_LABELS,
   MODEL_TIERS,
   recommendModel,
-  runKindsFor,
+  runsConflict,
   type AgentRunKind,
 } from "@/lib/agents/models";
 import {
@@ -30,16 +30,20 @@ import {
   skillsForAction,
   type ProjectSkill,
 } from "@/lib/agents/action-skills";
+import { storyPathFor } from "@/lib/agents/story-path";
 import type { AgentRun } from "@/lib/agents/run-store";
 import type { ModelTier, StoryModelAdvice, StoryStatus } from "@/lib/bmad/types";
 
 const POLL_MS = 5000;
+/** The story's runs are reloaded this often even when nothing runs. */
+const REFRESH_MS = 15000;
 
-const ACTIONS: { kind: AgentRunKind; label: string; button: string }[] = [
-  { kind: "plan", label: "Plan", button: "Plan" },
-  { kind: "dev", label: "Dev", button: "Start dev" },
-  { kind: "review", label: "Review", button: "Start review" },
-];
+const ACTION_BUTTONS: Record<AgentRunKind, { label: string; button: string }> = {
+  brainstorm: { label: "Brainstorm", button: "Brainstorm" },
+  plan: { label: "Plan", button: "Plan" },
+  dev: { label: "Dev", button: "Start dev" },
+  review: { label: "Review", button: "Start review" },
+};
 
 interface StoryAgentsCardProps {
   owner: string;
@@ -56,6 +60,12 @@ interface StoryAgentsCardProps {
   accounts: string[];
   /** Skills and BMAD agents installed in the project folder. */
   skills: ProjectSkill[];
+  /** A spec file exists for the story: decides whether planning comes first. */
+  hasSpec: boolean;
+  /** Story numbers this story needs; undefined when the project has no dependency file. */
+  dependsOn?: string[];
+  /** Story numbers of open stories that can be built now, alongside this one. */
+  parallelWith?: string[];
 }
 
 function SkillLabel({ skill }: { skill: ProjectSkill }) {
@@ -67,7 +77,7 @@ function SkillLabel({ skill }: { skill: ProjectSkill }) {
   );
 }
 
-/** Start a plan, dev or review run with a chosen skill and model, and follow the story's runs. */
+/** Start a brainstorm, plan, dev or review run with a chosen skill and model, and follow the story's runs. */
 export function StoryAgentsCard({
   owner,
   repo,
@@ -78,18 +88,25 @@ export function StoryAgentsCard({
   initialRuns,
   accounts,
   skills,
+  hasSpec,
+  dependsOn,
+  parallelWith,
 }: StoryAgentsCardProps) {
+  const path = storyPathFor({ status: storyStatus, hasSpec, advice: modelAdvice });
   const recommendations = {
+    brainstorm: recommendModel("brainstorm", modelAdvice),
     plan: recommendModel("plan", modelAdvice),
     dev: recommendModel("dev", modelAdvice),
     review: recommendModel("review", modelAdvice),
   };
   const [models, setModels] = useState<Record<AgentRunKind, ModelTier>>({
+    brainstorm: recommendations.brainstorm.model,
     plan: recommendations.plan.model,
     dev: recommendations.dev.model,
     review: recommendations.review.model,
   });
   const [chosenSkills, setChosenSkills] = useState<Record<AgentRunKind, string | null>>({
+    brainstorm: defaultSkillFor("brainstorm", skills),
     plan: defaultSkillFor("plan", skills),
     dev: defaultSkillFor("dev", skills),
     review: defaultSkillFor("review", skills),
@@ -105,9 +122,11 @@ export function StoryAgentsCard({
     if (result.success) setRuns(result.data);
   }, [owner, repo, storyId]);
 
-  const kinds = runKindsFor(storyStatus);
-  const actions = ACTIONS.filter((action) => kinds.includes(action.kind));
   const anyRunning = runs.some((r) => r.status === "running");
+  useEffect(() => {
+    const timer = setInterval(() => void loadRuns(), REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [loadRuns]);
   useEffect(() => {
     if (!anyRunning) return;
     const timer = setInterval(() => void loadRuns(), POLL_MS);
@@ -162,12 +181,42 @@ export function StoryAgentsCard({
           )}
         </div>
 
+        <div className="space-y-1 text-sm text-muted-foreground">
+          <p>{path.summary}</p>
+          {dependsOn && (
+            <>
+              <p>
+                <span className="font-medium text-foreground">Depends on:</span>{" "}
+                {dependsOn.length > 0 ? dependsOn.join(", ") : "nothing, it can start now"}
+              </p>
+              <p>
+                <span className="font-medium text-foreground">Parallel now:</span>{" "}
+                {parallelWith && parallelWith.length > 0
+                  ? parallelWith.join(", ")
+                  : "no open story is independent of this one"}
+              </p>
+            </>
+          )}
+        </div>
+
         {unavailableReason ? (
           <p className="text-sm text-muted-foreground">{unavailableReason}</p>
         ) : (
           <>
             <div className="space-y-4">
-              {actions.map(({ kind, label, button }) => {
+              {path.steps.map(({ kind, primary, why }) => {
+                const { label, button } = ACTION_BUTTONS[kind];
+                // Two runs that write the same spec or code must not overlap: wait for the running one.
+                const busy = runs.find((r) => r.status === "running" && runsConflict(r.kind, kind));
+                if (busy) {
+                  return (
+                    <div key={kind} className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span className="w-16 font-medium text-foreground">{label}</span>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      {AGENT_RUN_LABELS[busy.kind]} is running with /{busy.skill}; wait for it to finish.
+                    </div>
+                  );
+                }
                 const { suggested, other } = skillsForAction(kind, skills);
                 const skill = skills.find((s) => s.name === chosenSkills[kind]);
                 return (
@@ -226,6 +275,7 @@ export function StoryAgentsCard({
                         </SelectContent>
                       </Select>
                       <Button
+                        variant={primary ? "default" : "outline"}
                         onClick={() => void start(kind)}
                         disabled={pending !== null || !chosenSkills[kind]}
                       >
@@ -234,6 +284,8 @@ export function StoryAgentsCard({
                       </Button>
                     </div>
                     <p className="pl-18 text-xs text-muted-foreground">
+                      {why}
+                      <br />
                       Recommended model: {recommendations[kind].model} ({recommendations[kind].source})
                       {skill?.description && (
                         <>

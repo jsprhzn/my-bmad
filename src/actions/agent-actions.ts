@@ -35,7 +35,7 @@ const repoSchema = z.object({
 
 const startSchema = repoSchema.extend({
   storyId: z.string().min(1).max(50),
-  kind: z.enum(["plan", "dev", "review"]),
+  kind: z.enum(["brainstorm", "plan", "dev", "review"]),
   model: z.enum(MODEL_TIERS as [string, ...string[]]).optional(),
   fixFindings: z.boolean().optional(),
   account: z.string().min(1).max(40).optional(),
@@ -183,6 +183,25 @@ export async function listAgentRuns(
       storyId: parsed.data.storyId,
     });
     return { success: true, data: runs };
+  } catch (error) {
+    return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
+  }
+}
+
+/** Stories with a run that is still running, so the overview can show them as active. */
+export async function listRunningStoryIds(
+  input: z.infer<typeof repoSchema>,
+): Promise<ActionResult<string[]>> {
+  const parsed = repoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
+  }
+  const access = await requireAgentProject(parsed.data.owner, parsed.data.name);
+  if (!access.success) return access;
+  try {
+    const runs = await listRuns({ repoKey: access.data.repoKey, userId: access.data.userId });
+    const ids = [...new Set(runs.filter((r) => r.status === "running").map((r) => r.storyId))];
+    return { success: true, data: ids };
   } catch (error) {
     return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
   }

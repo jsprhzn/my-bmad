@@ -15,6 +15,7 @@ import { StoryDetailView } from "./story-detail-view";
 import { ArrowLeft } from "lucide-react";
 import type { Epic, StoryDetail } from "@/lib/bmad/types";
 import { getEpicShortId, getStoryShortId } from "@/lib/bmad/utils";
+import { RunningBadge, useRunningStoryIds } from "@/components/agents/running-story";
 
 interface EpicStoriesSheetProps {
   open: boolean;
@@ -29,6 +30,7 @@ export function EpicStoriesSheet({
   epic,
   stories,
 }: EpicStoriesSheetProps) {
+  const running = useRunningStoryIds();
   const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
   // Reset internal navigation when the targeted epic changes (covers both
   // "open with a different epic" and "close then reopen") — derived from
@@ -155,6 +157,7 @@ export function EpicStoriesSheet({
                           </span>
                         )}
                         <StatusBadge status={story.status} />
+                        {running.has(story.id) && <RunningBadge />}
                       </div>
                     </div>
                   </CardContent>
