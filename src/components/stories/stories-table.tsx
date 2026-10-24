@@ -22,6 +22,39 @@ import { ModelBadge } from "@/components/shared/model-badge";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { RunningBadge, useRunningStoryIds } from "@/components/agents/running-story";
 import type { StoryDetail } from "@/lib/bmad/types";
+import { storyNumber } from "@/lib/bmad/story-number";
+
+/** Story numbers ("1.3") as small chips; a number that is in this list links to its story. */
+function NumberChips({
+  numbers,
+  hrefFor,
+  muted,
+}: {
+  numbers: string[];
+  hrefFor: (number: string) => string | null;
+  muted: boolean;
+}) {
+  if (numbers.length === 0) return <span className="text-muted-foreground">-</span>;
+  const chipClass = `rounded-md border px-1.5 py-0.5 text-xs ${
+    muted ? "border-border text-muted-foreground" : "border-primary/40 text-primary"
+  }`;
+  return (
+    <span className="flex flex-wrap gap-1">
+      {numbers.map((number) => {
+        const href = hrefFor(number);
+        return href ? (
+          <Link key={number} href={href} onClick={(e) => e.stopPropagation()} className={chipClass}>
+            {number}
+          </Link>
+        ) : (
+          <span key={number} className={chipClass}>
+            {number}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
 
 function TaskGauge({ completed, total }: { completed: number; total: number }) {
   const size = 44;
@@ -71,7 +104,15 @@ function storyHref(basePath: string, storyId: string) {
   return `${basePath}/${encodeURIComponent(storyId)}`;
 }
 
-function getColumns(basePath: string, running: Set<string>): ColumnDef<StoryDetail>[] {
+function getColumns(
+  basePath: string,
+  running: Set<string>,
+  idByNumber: Map<string, string>,
+): ColumnDef<StoryDetail>[] {
+  const hrefFor = (number: string) => {
+    const id = idByNumber.get(number);
+    return id ? storyHref(basePath, id) : null;
+  };
   return [
     {
       accessorKey: "id",
@@ -110,6 +151,22 @@ function getColumns(basePath: string, running: Set<string>): ColumnDef<StoryDeta
           {running.has(row.original.id) && <RunningBadge />}
         </div>
       ),
+    },
+    {
+      id: "dependsOn",
+      header: "Depends on",
+      cell: ({ row }) => (
+        <NumberChips numbers={row.original.dependsOn ?? []} hrefFor={hrefFor} muted={false} />
+      ),
+      enableSorting: false,
+    },
+    {
+      id: "parallelWith",
+      header: "Can run now",
+      cell: ({ row }) => (
+        <NumberChips numbers={row.original.parallelWith ?? []} hrefFor={hrefFor} muted />
+      ),
+      enableSorting: false,
     },
     {
       accessorKey: "epicTitle",
@@ -155,7 +212,18 @@ export function StoriesTable({ stories }: StoriesTableProps) {
   const router = useRouter();
   const pathname = usePathname();
   const running = useRunningStoryIds();
-  const columns = useMemo(() => getColumns(pathname, running), [pathname, running]);
+  const idByNumber = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const story of stories) {
+      const number = storyNumber(story.id);
+      if (number) map.set(number, story.id);
+    }
+    return map;
+  }, [stories]);
+  const columns = useMemo(
+    () => getColumns(pathname, running, idByNumber),
+    [pathname, running, idByNumber],
+  );
 
   const table = useReactTable({
     data: stories,

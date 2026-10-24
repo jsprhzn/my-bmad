@@ -85,6 +85,7 @@ model Repo {
   description   String?
   sourceType    String    @default("github")
   localPath     String?
+  agentAccount  String?
   totalFiles    Int?
   lastSyncedAt  DateTime?
   userId        String

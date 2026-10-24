@@ -28,4 +28,6 @@ export interface RepoConfig {
   sourceType: SourceType;
   localPath: string | null;
   lastSyncedAt: Date | null;
+  /** Claude account (AGENT_CLAUDE_ACCOUNTS name) this project's agent runs use; null = the first one. */
+  agentAccount: string | null;
 }

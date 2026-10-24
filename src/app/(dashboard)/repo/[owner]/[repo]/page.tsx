@@ -11,6 +11,9 @@ import { formatRelativeTime } from "@/lib/utils";
 import { DeleteRepoButton } from "@/components/shared/delete-repo-button";
 import { RefreshRepoButton } from "@/components/shared/refresh-repo-button";
 import { RepoSettingsModal } from "@/components/shared/repo-settings-modal";
+import { ProjectAccountSelect } from "@/components/agents/project-account-select";
+import { agentRunsEnabled } from "@/lib/agents/run-store";
+import { claudeAccounts } from "@/lib/agents/accounts";
 import {
   getAuthenticatedUserId,
   getAuthenticatedRepoConfig,
@@ -65,6 +68,14 @@ export default async function RepoOverviewPage({ params }: RepoPageProps) {
               {project.displayName}
             </h1>
             <RefreshRepoButton owner={owner} name={repoName} />
+            {isLocal && agentRunsEnabled() && claudeAccounts().length > 0 && (
+              <ProjectAccountSelect
+                owner={owner}
+                name={repoName}
+                accounts={claudeAccounts().map((a) => a.name)}
+                current={repoConfig.agentAccount}
+              />
+            )}
             {!isLocal && (
               <RepoSettingsModal
                 owner={owner}
