@@ -8,6 +8,7 @@ interface StreamEvent {
   subtype?: string;
   model?: string;
   session_id?: string;
+  skills?: string[];
   is_error?: boolean;
   num_turns?: number;
   result?: string;
@@ -44,7 +45,7 @@ function parseEvent(line: string): StreamEvent | null {
 
 function summarizeToolInput(input: Record<string, unknown> | undefined): string {
   if (!input) return "";
-  for (const key of ["command", "file_path", "pattern", "url", "description", "prompt"]) {
+  for (const key of ["skill", "command", "file_path", "pattern", "url", "description", "prompt"]) {
     const value = input[key];
     if (typeof value === "string" && value.trim()) {
       const oneLine = value.replace(/\s+/g, " ").trim();
@@ -56,16 +57,29 @@ function summarizeToolInput(input: Record<string, unknown> | undefined): string 
   return "";
 }
 
+export interface FormatOptions {
+  /** The skill the run was started with, checked against the skills Claude loaded. */
+  skill?: string;
+}
+
 /** Format one line; non-JSON lines pass through unchanged. */
-export function formatStreamLine(line: string): string[] {
+export function formatStreamLine(line: string, options: FormatOptions = {}): string[] {
   const event = parseEvent(line);
   if (!event) return line.trim() ? [line] : [];
 
   switch (event.type) {
-    case "system":
-      return event.subtype === "init"
-        ? [`[claude] session ${event.session_id ?? "?"} · model ${event.model ?? "?"}`]
-        : [];
+    case "system": {
+      if (event.subtype !== "init") return [];
+      const out = [`[claude] session ${event.session_id ?? "?"} · model ${event.model ?? "?"}`];
+      if (options.skill && event.skills) {
+        out.push(
+          event.skills.includes(options.skill)
+            ? `[claude] ✓ /${options.skill} found; the run starts with it`
+            : `[claude] ✗ /${options.skill} is not among the ${event.skills.length} skills Claude loaded in this folder`,
+        );
+      }
+      return out;
+    }
     case "assistant": {
       const out: string[] = [];
       for (const block of event.message?.content ?? []) {
@@ -91,8 +105,11 @@ export function formatStreamLine(line: string): string[] {
   }
 }
 
-export function formatStream(content: string): string {
-  return content.split(/\r?\n/).flatMap(formatStreamLine).join("\n");
+export function formatStream(content: string, options: FormatOptions = {}): string {
+  return content
+    .split(/\r?\n/)
+    .flatMap((line) => formatStreamLine(line, options))
+    .join("\n");
 }
 
 /** The final result event of a run, if it has ended. */

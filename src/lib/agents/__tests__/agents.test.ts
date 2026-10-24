@@ -58,22 +58,32 @@ describe("buildAgentPrompt", () => {
   };
 
   it("starts bmad-build-auto with the story and its spec", () => {
-    const prompt = buildAgentPrompt({ ...base, kind: "dev" });
+    const prompt = buildAgentPrompt({ ...base, kind: "dev", skill: "bmad-build-auto" });
     expect(prompt.split("\n")[0]).toBe("/bmad-build-auto Build story 1.4 (Invite my accountant).");
     expect(prompt).toContain("spec-1-4-invite.md");
   });
 
   it("plans with bmad-build-auto and halts at ready-for-dev", () => {
-    const prompt = buildAgentPrompt({ ...base, kind: "plan" });
+    const prompt = buildAgentPrompt({ ...base, kind: "plan", skill: "bmad-build-auto" });
     expect(prompt.split("\n")[0]).toBe(
       "/bmad-build-auto Plan story 1.4 (Invite my accountant). Halt after planning.",
     );
     expect(prompt).toContain("do not implement");
   });
 
+  it("starts with the chosen skill or agent", () => {
+    const prompt = buildAgentPrompt({ ...base, kind: "review", skill: "bmad-review" });
+    expect(prompt.split("\n")[0]).toBe("/bmad-review Review the changes for story 1.4 (Invite my accountant).");
+  });
+
   it("lets a review fix or only report its findings", () => {
-    expect(buildAgentPrompt({ ...base, kind: "review" })).toContain("Resolve every finding");
-    const reportOnly = buildAgentPrompt({ ...base, kind: "review", fixFindings: false });
+    expect(buildAgentPrompt({ ...base, kind: "review", skill: "bmad-code-review" })).toContain("Resolve every finding");
+    const reportOnly = buildAgentPrompt({
+      ...base,
+      kind: "review",
+      skill: "bmad-code-review",
+      fixFindings: false,
+    });
     expect(reportOnly.split("\n")[0]).toMatch(/^\/bmad-code-review /);
     expect(reportOnly).toContain("Do not change code.");
   });
@@ -170,5 +180,63 @@ describe("agentEnvironment", () => {
   it("reads keys from dotenv content", async () => {
     const { dotenvKeys } = await import("../environment");
     expect(dotenvKeys("# c\nA=1\nexport B = 2\n  C=\nnot a key\n")).toEqual(["A", "B", "C"]);
+  });
+});
+
+describe("skills per action", () => {
+  const installed = [
+    { name: "bmad-agent-dev", description: "Amelia", persona: true },
+    { name: "bmad-build", description: "", persona: false },
+    { name: "bmad-build-auto", description: "", persona: false },
+    { name: "bmad-code-review", description: "", persona: false },
+    { name: "bmad-help", description: "", persona: false },
+  ];
+
+  it("defaults to the preferred installed skill and lists the rest", async () => {
+    const { defaultSkillFor, skillsForAction } = await import("../action-skills");
+    expect(defaultSkillFor("plan", installed)).toBe("bmad-build-auto");
+    expect(defaultSkillFor("review", installed)).toBe("bmad-code-review");
+    const dev = skillsForAction("dev", installed);
+    expect(dev.suggested.map((s) => s.name)).toEqual(["bmad-build-auto", "bmad-build", "bmad-agent-dev"]);
+    expect(dev.other.map((s) => s.name)).toEqual(["bmad-code-review", "bmad-help"]);
+  });
+
+  it("has no default when nothing fits", async () => {
+    const { defaultSkillFor } = await import("../action-skills");
+    expect(defaultSkillFor("review", [{ name: "bmad-help", description: "", persona: false }])).toBeNull();
+  });
+});
+
+describe("recommendModel", () => {
+  it("uses Plan and Review model columns when present, and says so", async () => {
+    const { recommendModel } = await import("../models");
+    const row: StoryModelAdvice = {
+      ...advice("Haiku", ["haiku"]),
+      planModel: "Opus",
+      planTiers: ["opus"],
+      reviewModel: "Sonnet",
+      reviewTiers: ["sonnet"],
+    };
+    expect(recommendModel("plan", row)).toEqual({ model: "opus", source: "Plan model in story-complexity.md" });
+    expect(recommendModel("dev", row).model).toBe("haiku");
+    expect(recommendModel("review", row)).toEqual({ model: "sonnet", source: "Review model in story-complexity.md" });
+  });
+
+  it("explains the fallback rules", async () => {
+    const { recommendModel } = await import("../models");
+    expect(recommendModel("plan", advice("Haiku", ["haiku"])).source).toBe("build model (no Plan model column)");
+    expect(recommendModel("review", advice("Haiku", ["haiku"]))).toEqual({
+      model: "sonnet",
+      source: "one tier above the build model",
+    });
+    expect(recommendModel("dev", undefined).source).toBe("default (no row in story-complexity.md)");
+  });
+});
+
+describe("skill check in the log", () => {
+  it("says whether Claude loaded the skill the run starts with", () => {
+    const init = JSON.stringify({ type: "system", subtype: "init", session_id: "s", model: "m", skills: ["bmad-build-auto"] });
+    expect(formatStream(init, { skill: "bmad-build-auto" })).toContain("✓ /bmad-build-auto found");
+    expect(formatStream(init, { skill: "bmad-spec" })).toContain("✗ /bmad-spec is not among the 1 skills");
   });
 });

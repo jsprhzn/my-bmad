@@ -16,6 +16,8 @@ import {
 } from "@/lib/agents/models";
 import { buildAgentPrompt } from "@/lib/agents/prompts";
 import { findClaudeAccount } from "@/lib/agents/accounts";
+import { defaultSkillFor } from "@/lib/agents/action-skills";
+import { listProjectSkills } from "@/lib/agents/project-skills";
 import {
   agentRunsEnabled,
   getRun,
@@ -37,6 +39,7 @@ const startSchema = repoSchema.extend({
   model: z.enum(MODEL_TIERS as [string, ...string[]]).optional(),
   fixFindings: z.boolean().optional(),
   account: z.string().min(1).max(40).optional(),
+  skill: z.string().regex(/^[\w.:-]{1,80}$/).optional(),
 });
 
 const runSchema = repoSchema.extend({
@@ -114,6 +117,23 @@ export async function startAgentRun(
       };
     }
 
+    const installed = await listProjectSkills(localPath);
+    const skill = parsed.data.skill ?? defaultSkillFor(kind, installed);
+    if (!skill) {
+      return {
+        success: false,
+        error: `This project has no skill installed for ${AGENT_RUN_LABELS[kind].toLowerCase()}.`,
+        code: "NO_SKILL",
+      };
+    }
+    if (!installed.some((s) => s.name === skill)) {
+      return {
+        success: false,
+        error: `Skill ${skill} is not installed in this project.`,
+        code: "VALIDATION_ERROR",
+      };
+    }
+
     const account = findClaudeAccount(parsed.data.account);
     if (parsed.data.account && !account) {
       return { success: false, error: "Unknown Claude account", code: "VALIDATION_ERROR" };
@@ -129,10 +149,12 @@ export async function startAgentRun(
       storyId,
       storyTitle: story.title,
       kind,
+      skill,
       model,
       account,
       prompt: buildAgentPrompt({
         kind,
+        skill,
         storyId,
         storyTitle: story.title,
         sourcePaths: story.sourcePaths ?? [],

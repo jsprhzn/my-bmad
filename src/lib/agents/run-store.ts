@@ -26,6 +26,8 @@ export interface AgentRun {
   storyId: string;
   storyTitle: string;
   kind: AgentRunKind;
+  /** Skill (or BMAD agent) the run was started with, e.g. "bmad-build-auto". */
+  skill: string;
   model: ModelTier;
   /** Claude account (AGENT_CLAUDE_ACCOUNTS name); null runs as the default account. */
   account: string | null;
@@ -115,6 +117,7 @@ export interface StartRunInput {
   storyId: string;
   storyTitle: string;
   kind: AgentRunKind;
+  skill: string;
   model: ModelTier;
   prompt: string;
   /** Run as this Claude account; null inherits the server's environment. */
@@ -154,6 +157,7 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
     storyId: input.storyId,
     storyTitle: input.storyTitle,
     kind: input.kind,
+    skill: input.skill,
     model: input.model,
     account: input.account?.name ?? null,
     status: "running",
@@ -200,7 +204,7 @@ export async function getRun(
   if (stored.repoKey !== owner.repoKey || stored.userId !== owner.userId) return null;
   const run = await refreshRun(stored);
   const stderr = (await readText(runFile(id, "stderr.log"))).trim();
-  const log = [formatStream(await readText(runFile(id, "jsonl"))), stderr]
+  const log = [formatStream(await readText(runFile(id, "jsonl")), { skill: run.skill }), stderr]
     .filter(Boolean)
     .join("\n\n");
   return { run, log, prompt: await readText(runFile(id, "prompt.txt")) };

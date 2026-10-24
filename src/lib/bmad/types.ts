@@ -81,6 +81,12 @@ export interface ModelAdviceRow {
   /** Model tiers named in the model cell, in order. */
   tiers: ModelTier[];
   reason?: string;
+  /** Optional "Plan model" column: who writes the spec, when it differs from the build model. */
+  planModel?: string;
+  planTiers?: ModelTier[];
+  /** Optional "Review model" column: who reviews the built story. */
+  reviewModel?: string;
+  reviewTiers?: ModelTier[];
 }
 
 export interface StoryModelAdvice extends ModelAdviceRow {

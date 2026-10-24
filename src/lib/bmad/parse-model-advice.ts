@@ -43,7 +43,11 @@ export function parseModelAdvice(content: string): Map<string, ModelAdviceRow> {
     }
 
     const storyCol = findColumn(headers, /^(?:story|id|story id)$/i);
-    const modelCol = findColumn(headers, /^model/i);
+    // "Model" is the build model; "Dev model" / "Build model" names it explicitly.
+    const devCol = findColumn(headers, /^(?:dev|build)(?:\s+model)?$/i);
+    const modelCol = devCol >= 0 ? devCol : findColumn(headers, /^model/i);
+    const planCol = findColumn(headers, /^plan(?:ning)?(?:\s+model)?$/i);
+    const reviewCol = findColumn(headers, /^review(?:\s+model)?$/i);
     if (storyCol < 0 || modelCol < 0) continue;
     const titleCol = findColumn(headers, /^(?:title|name)$/i);
     const complexityCol = findColumn(headers, /^(?:cx|complexity|size)$/i);
@@ -56,6 +60,8 @@ export function parseModelAdvice(content: string): Map<string, ModelAdviceRow> {
       const id = cells[storyCol]?.replace(/^(?:story\s+|s)/i, "").toLowerCase();
       const model = cells[modelCol];
       if (!id || !model) continue;
+      const planModel = planCol >= 0 ? cells[planCol] || undefined : undefined;
+      const reviewModel = reviewCol >= 0 ? cells[reviewCol] || undefined : undefined;
       rows.set(id, {
         id,
         title: titleCol >= 0 ? cells[titleCol] || undefined : undefined,
@@ -63,6 +69,8 @@ export function parseModelAdvice(content: string): Map<string, ModelAdviceRow> {
         model,
         tiers: parseModelTiers(model),
         reason: reasonCol >= 0 ? cells[reasonCol] || undefined : undefined,
+        ...(planModel ? { planModel, planTiers: parseModelTiers(planModel) } : {}),
+        ...(reviewModel ? { reviewModel, reviewTiers: parseModelTiers(reviewModel) } : {}),
       });
     }
     i = j - 1;
