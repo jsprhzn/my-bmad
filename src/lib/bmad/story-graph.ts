@@ -1,4 +1,5 @@
 import yaml from "js-yaml";
+import { storyNumber } from "./story-number";
 import type { StoryDetail } from "./types";
 
 /**
@@ -12,13 +13,7 @@ export const STORY_DEPENDENCIES_FILE = /(?:^|\/)story-dependencies\.ya?ml$/i;
 /** Story number ("1.2", "1.3c") → the numbers it needs directly. */
 export type StoryGraph = Map<string, string[]>;
 
-const STORY_NUMBER = /^(\d+)[-.](\d+[a-z]?)/i;
-
-/** "1-4-invite-my-accountant" or "1.4" → "1.4"; null when there is no number. */
-export function storyNumber(storyId: string): string | null {
-  const match = storyId.match(STORY_NUMBER);
-  return match ? `${match[1]}.${match[2].toLowerCase()}` : null;
-}
+export { storyNumber } from "./story-number";
 
 export function parseStoryDependencies(content: string): StoryGraph {
   const graph: StoryGraph = new Map();

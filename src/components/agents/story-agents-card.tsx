@@ -58,6 +58,8 @@ interface StoryAgentsCardProps {
   initialRuns: AgentRun[];
   /** Claude accounts to run as (AGENT_CLAUDE_ACCOUNTS); a choice shows when there are several. */
   accounts: string[];
+  /** The account saved for the project; runs start with it. */
+  defaultAccount?: string | null;
   /** Skills and BMAD agents installed in the project folder. */
   skills: ProjectSkill[];
   /** A spec file exists for the story: decides whether planning comes first. */
@@ -87,6 +89,7 @@ export function StoryAgentsCard({
   unavailableReason,
   initialRuns,
   accounts,
+  defaultAccount,
   skills,
   hasSpec,
   dependsOn,
@@ -112,7 +115,7 @@ export function StoryAgentsCard({
     review: defaultSkillFor("review", skills),
   });
   const [fixFindings, setFixFindings] = useState(true);
-  const [account, setAccount] = useState<string | undefined>(accounts[0]);
+  const [account, setAccount] = useState<string | undefined>(defaultAccount ?? accounts[0]);
   const [runs, setRuns] = useState<AgentRun[]>(initialRuns);
   const [pending, setPending] = useState<AgentRunKind | null>(null);
   const [error, setError] = useState<string | null>(null);

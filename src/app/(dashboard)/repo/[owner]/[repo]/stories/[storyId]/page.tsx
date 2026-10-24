@@ -79,6 +79,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
         unavailableReason={agentsUnavailable}
         initialRuns={runsResult?.success ? runsResult.data : []}
         accounts={claudeAccounts().map((a) => a.name)}
+        defaultAccount={repoConfig.agentAccount}
         skills={skills}
         hasSpec={(story.sourcePaths?.length ?? 0) > 0}
         dependsOn={story.dependsOn}

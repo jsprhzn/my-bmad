@@ -1,7 +1,9 @@
 "use server";
 
 import { existsSync } from "node:fs";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { prisma } from "@/lib/db/client";
 import { getCachedBmadProject } from "@/lib/bmad/cached-project";
 import {
   getAuthenticatedRepoConfig,
@@ -134,8 +136,10 @@ export async function startAgentRun(
       };
     }
 
-    const account = findClaudeAccount(parsed.data.account);
-    if (parsed.data.account && !account) {
+    // A run uses the account chosen for it, else the project's account, else the first one.
+    const requestedAccount = parsed.data.account ?? repo?.agentAccount ?? undefined;
+    const account = findClaudeAccount(requestedAccount);
+    if (requestedAccount && !account) {
       return { success: false, error: "Unknown Claude account", code: "VALIDATION_ERROR" };
     }
 
@@ -185,6 +189,36 @@ export async function listAgentRuns(
     return { success: true, data: runs };
   } catch (error) {
     return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
+  }
+}
+
+const projectAccountSchema = repoSchema.extend({
+  account: z.string().min(1).max(40).nullable(),
+});
+
+/** Save which Claude account this project's agent runs use; null resets to the first one. */
+export async function setProjectAgentAccount(
+  input: z.infer<typeof projectAccountSchema>,
+): Promise<ActionResult<{ account: string | null }>> {
+  const parsed = projectAccountSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
+  }
+  const access = await requireAgentProject(parsed.data.owner, parsed.data.name);
+  if (!access.success) return access;
+  const { account } = parsed.data;
+  if (account !== null && !findClaudeAccount(account)) {
+    return { success: false, error: "Unknown Claude account", code: "VALIDATION_ERROR" };
+  }
+  try {
+    await prisma.repo.updateMany({
+      where: { userId: access.data.userId, owner: parsed.data.owner, name: parsed.data.name },
+      data: { agentAccount: account },
+    });
+    revalidatePath(`/repo/${parsed.data.owner}/${parsed.data.name}`);
+    return { success: true, data: { account } };
+  } catch (error) {
+    return { success: false, error: sanitizeError(error, "DB_ERROR"), code: "DB_ERROR" };
   }
 }
 
