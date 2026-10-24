@@ -17,6 +17,7 @@ import { ModelBadge } from "@/components/shared/model-badge";
 import { RunStatusBadge } from "./run-status-badge";
 import { listAgentRuns, startAgentRun } from "@/actions/agent-actions";
 import {
+  AGENT_RUN_LABELS,
   MODEL_TIERS,
   recommendedModel,
   type AgentRunKind,
@@ -27,6 +28,7 @@ import type { ModelTier, StoryModelAdvice } from "@/lib/bmad/types";
 const POLL_MS = 5000;
 
 const ACTIONS: { kind: AgentRunKind; label: string }[] = [
+  { kind: "plan", label: "Plan" },
   { kind: "dev", label: "Start dev" },
   { kind: "review", label: "Start review" },
 ];
@@ -52,6 +54,7 @@ export function StoryAgentsCard({
   initialRuns,
 }: StoryAgentsCardProps) {
   const [models, setModels] = useState<Record<AgentRunKind, ModelTier>>({
+    plan: recommendedModel("plan", modelAdvice),
     dev: recommendedModel("dev", modelAdvice),
     review: recommendedModel("review", modelAdvice),
   });
@@ -157,7 +160,7 @@ export function StoryAgentsCard({
                       href={`/repo/${owner}/${repo}/runs/${run.id}`}
                       className="font-medium hover:underline"
                     >
-                      {run.kind === "dev" ? "Dev" : "Review"} · {run.model}
+                      {AGENT_RUN_LABELS[run.kind]} · {run.model}
                     </Link>
                     <span className="text-muted-foreground">
                       {new Date(run.startedAt).toLocaleString()}

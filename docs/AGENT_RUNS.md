@@ -15,16 +15,19 @@ Restart the server after changing these values. The `claude` CLI must be install
 
 ## How it works
 
-The **Agents** card on a story page has two actions:
+The **Agents** card on a story page has three actions:
 
-- **Start dev** runs `/bmad-build-auto` for the story.
+- **Plan** runs `/bmad-build-auto` with "Halt after planning.": it writes the story's spec, sets it to `ready-for-dev` and stops. Start dev later builds from that spec.
+- **Start dev** runs `/bmad-build-auto` for the story: it plans (when there is no ready spec yet) and builds.
 - **Start review** runs `/bmad-code-review` for the story. With **Review fixes its findings** on, the review applies its fixes; off, it only reports them.
 
 Each action has a model choice, pre-filled from the project's `story-complexity.md` (a table with a `Story` and a `Model` column):
 
-- Dev uses the first model the row names (`Opus (core) · Haiku (theme)` → Opus).
+- Plan and dev use the first model the row names (`Opus (core) · Haiku (theme)` → Opus).
 - Review uses one tier higher (Haiku → Sonnet, Sonnet → Opus, Opus stays Opus).
-- Without a row, dev uses Sonnet and review Opus.
+- Without a row, plan and dev use Sonnet and review Opus.
+
+A plan and a dev run for the same story never run at the same time; they write the same spec.
 
 A run is a detached `claude -p` process in the project folder. Its record, prompt and output are files in `.agent-runs/` (or `AGENT_RUNS_DIR`), so runs survive a restart of MyBMAD. The run page shows the log while it runs, the cost and turns when it ends, and a **Stop** button.
 

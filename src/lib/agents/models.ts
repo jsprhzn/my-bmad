@@ -2,7 +2,20 @@ import type { ModelTier, StoryModelAdvice } from "@/lib/bmad/types";
 
 export const MODEL_TIERS: ModelTier[] = ["haiku", "sonnet", "opus"];
 
-export type AgentRunKind = "dev" | "review";
+/** plan writes the spec and stops at ready-for-dev; dev plans (if needed) and builds. */
+export type AgentRunKind = "plan" | "dev" | "review";
+
+export const AGENT_RUN_LABELS: Record<AgentRunKind, string> = {
+  plan: "Plan",
+  dev: "Dev",
+  review: "Review",
+};
+
+/** Kinds that write the same spec and code, so two of them must not run at once. */
+export function runsConflict(a: AgentRunKind, b: AgentRunKind): boolean {
+  const builds = (k: AgentRunKind) => k === "plan" || k === "dev";
+  return a === b || (builds(a) && builds(b));
+}
 
 /** Model used when the project has no advice for the story. */
 export const DEFAULT_DEV_MODEL: ModelTier = "sonnet";
@@ -18,6 +31,7 @@ export function reviewModelFor(advice?: StoryModelAdvice): ModelTier {
   return MODEL_TIERS[Math.min(dev + 1, MODEL_TIERS.length - 1)];
 }
 
+/** Planning uses the build model: the spec decides what gets built. */
 export function recommendedModel(kind: AgentRunKind, advice?: StoryModelAdvice): ModelTier {
-  return kind === "dev" ? devModelFor(advice) : reviewModelFor(advice);
+  return kind === "review" ? reviewModelFor(advice) : devModelFor(advice);
 }

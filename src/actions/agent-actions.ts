@@ -8,7 +8,12 @@ import {
   getAuthenticatedSession,
 } from "@/lib/db/helpers";
 import { sanitizeError } from "@/lib/errors";
-import { MODEL_TIERS, recommendedModel } from "@/lib/agents/models";
+import {
+  AGENT_RUN_LABELS,
+  MODEL_TIERS,
+  recommendedModel,
+  runsConflict,
+} from "@/lib/agents/models";
 import { buildAgentPrompt } from "@/lib/agents/prompts";
 import {
   agentRunsEnabled,
@@ -27,7 +32,7 @@ const repoSchema = z.object({
 
 const startSchema = repoSchema.extend({
   storyId: z.string().min(1).max(50),
-  kind: z.enum(["dev", "review"]),
+  kind: z.enum(["plan", "dev", "review"]),
   model: z.enum(MODEL_TIERS as [string, ...string[]]).optional(),
   fixFindings: z.boolean().optional(),
 });
@@ -97,11 +102,12 @@ export async function startAgentRun(
       return { success: false, error: "Story not found", code: "NOT_FOUND" };
     }
 
-    const running = await listRuns({ repoKey, userId, storyId });
-    if (running.some((r) => r.status === "running" && r.kind === kind)) {
+    const runs = await listRuns({ repoKey, userId, storyId });
+    const conflict = runs.find((r) => r.status === "running" && runsConflict(r.kind, kind));
+    if (conflict) {
       return {
         success: false,
-        error: `A ${kind} run is already running for story ${storyId}.`,
+        error: `A ${AGENT_RUN_LABELS[conflict.kind].toLowerCase()} run is already running for story ${storyId}.`,
         code: "ALREADY_RUNNING",
       };
     }
