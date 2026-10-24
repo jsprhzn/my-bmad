@@ -16,9 +16,6 @@ export default function LoginPage() {
           registrationEnabled={registrationEnabled}
         />
       </Suspense>
-      <p className="fixed bottom-4 text-xs text-muted-foreground">
-        Made with ❤️ by Hichem
-      </p>
     </div>
   );
 }
