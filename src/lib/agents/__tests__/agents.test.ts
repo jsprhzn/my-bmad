@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { devModelFor, recommendedModel, reviewModelFor } from "../models";
+import { devModelFor, recommendedModel, reviewModelFor, runsConflict } from "../models";
 import { buildAgentPrompt } from "../prompts";
 import { formatStream, readStreamResult } from "../stream-format";
 import type { StoryModelAdvice } from "@/lib/bmad/types";
@@ -15,6 +15,18 @@ describe("model choice", () => {
     expect(reviewModelFor(mixed)).toBe("opus");
     expect(recommendedModel("review", advice("Haiku", ["haiku"]))).toBe("sonnet");
     expect(recommendedModel("review", advice("Sonnet", ["sonnet"]))).toBe("opus");
+  });
+
+  it("plans with the build model", () => {
+    expect(recommendedModel("plan", advice("Haiku", ["haiku"]))).toBe("haiku");
+    expect(recommendedModel("plan", undefined)).toBe("sonnet");
+  });
+
+  it("never runs plan and dev, or two of a kind, at once", () => {
+    expect(runsConflict("plan", "dev")).toBe(true);
+    expect(runsConflict("review", "review")).toBe(true);
+    expect(runsConflict("plan", "review")).toBe(false);
+    expect(runsConflict("dev", "review")).toBe(false);
   });
 
   it("falls back to Sonnet to build and Opus to review", () => {
@@ -35,6 +47,14 @@ describe("buildAgentPrompt", () => {
     const prompt = buildAgentPrompt({ ...base, kind: "dev" });
     expect(prompt.split("\n")[0]).toBe("/bmad-build-auto Build story 1.4 (Invite my accountant).");
     expect(prompt).toContain("spec-1-4-invite.md");
+  });
+
+  it("plans with bmad-build-auto and halts at ready-for-dev", () => {
+    const prompt = buildAgentPrompt({ ...base, kind: "plan" });
+    expect(prompt.split("\n")[0]).toBe(
+      "/bmad-build-auto Plan story 1.4 (Invite my accountant). Halt after planning.",
+    );
+    expect(prompt).toContain("do not implement");
   });
 
   it("lets a review fix or only report its findings", () => {
