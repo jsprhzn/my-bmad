@@ -15,6 +15,7 @@ import {
   runsConflict,
 } from "@/lib/agents/models";
 import { buildAgentPrompt } from "@/lib/agents/prompts";
+import { findClaudeAccount } from "@/lib/agents/accounts";
 import {
   agentRunsEnabled,
   getRun,
@@ -35,6 +36,7 @@ const startSchema = repoSchema.extend({
   kind: z.enum(["plan", "dev", "review"]),
   model: z.enum(MODEL_TIERS as [string, ...string[]]).optional(),
   fixFindings: z.boolean().optional(),
+  account: z.string().min(1).max(40).optional(),
 });
 
 const runSchema = repoSchema.extend({
@@ -112,6 +114,11 @@ export async function startAgentRun(
       };
     }
 
+    const account = findClaudeAccount(parsed.data.account);
+    if (parsed.data.account && !account) {
+      return { success: false, error: "Unknown Claude account", code: "VALIDATION_ERROR" };
+    }
+
     const model =
       (parsed.data.model as AgentRun["model"] | undefined) ??
       recommendedModel(kind, story.modelAdvice);
@@ -123,6 +130,7 @@ export async function startAgentRun(
       storyTitle: story.title,
       kind,
       model,
+      account,
       prompt: buildAgentPrompt({
         kind,
         storyId,

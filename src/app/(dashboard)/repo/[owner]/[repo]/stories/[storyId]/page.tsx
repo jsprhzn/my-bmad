@@ -13,6 +13,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { StoryAgentsCard } from "@/components/agents/story-agents-card";
 import { agentRunsEnabled } from "@/lib/agents/run-store";
 import { listAgentRuns } from "@/actions/agent-actions";
+import { claudeAccounts } from "@/lib/agents/accounts";
 
 interface StoryPageProps {
   params: Promise<{ owner: string; repo: string; storyId: string }>;
@@ -74,6 +75,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
         modelAdvice={story.modelAdvice}
         unavailableReason={agentsUnavailable}
         initialRuns={runsResult?.success ? runsResult.data : []}
+        accounts={claudeAccounts().map((a) => a.name)}
       />
       <StoryDetailView story={story} showHeader={false} />
     </div>

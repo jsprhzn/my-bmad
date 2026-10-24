@@ -35,6 +35,7 @@ export default async function AgentRunPage({ params }: RunPageProps) {
           </h1>
           <p className="text-sm text-muted-foreground">
             Story {run.storyId}: {run.storyTitle}
+            {run.account && ` · account ${run.account}`}
           </p>
         </div>
       </div>

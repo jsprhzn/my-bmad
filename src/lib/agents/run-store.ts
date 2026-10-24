@@ -26,6 +26,8 @@ export interface AgentRun {
   storyTitle: string;
   kind: AgentRunKind;
   model: ModelTier;
+  /** Claude account (AGENT_CLAUDE_ACCOUNTS name); null runs as the default account. */
+  account: string | null;
   status: AgentRunStatus;
   pid: number | null;
   startedAt: string;
@@ -114,6 +116,8 @@ export interface StartRunInput {
   kind: AgentRunKind;
   model: ModelTier;
   prompt: string;
+  /** Run as this Claude account; null inherits the server's environment. */
+  account: { name: string; configDir: string } | null;
 }
 
 export async function startRun(input: StartRunInput): Promise<AgentRun> {
@@ -134,7 +138,9 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
     cwd: input.localPath,
     detached: true,
     stdio: "ignore",
-    env: process.env,
+    env: input.account
+      ? { ...process.env, CLAUDE_CONFIG_DIR: input.account.configDir }
+      : process.env,
   });
   child.unref();
 
@@ -146,6 +152,7 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
     storyTitle: input.storyTitle,
     kind: input.kind,
     model: input.model,
+    account: input.account?.name ?? null,
     status: "running",
     pid: child.pid ?? null,
     startedAt: new Date().toISOString(),
