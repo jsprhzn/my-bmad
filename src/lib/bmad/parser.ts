@@ -5,7 +5,14 @@ import { parseEpics } from "./parse-epics";
 import { parseEpicFile } from "./parse-epic-file";
 import { parseStory } from "./parse-story";
 import { correlate, computeProjectStats } from "./correlate";
-import { buildFileTree, compareIds, normalizeStoryStatus } from "./utils";
+import {
+  NON_STORY_FILE_PREFIX,
+  STORY_FILE_PREFIX,
+  buildFileTree,
+  compareIds,
+  normalizeStoryStatus,
+} from "./utils";
+import { mergeStoryParts } from "./merge-story-parts";
 import { resolveBmadOutputDir } from "./parse-config";
 import { parseEpicFolderName } from "./parse-epic-folder";
 import type { RepoConfig } from "@/lib/types";
@@ -119,10 +126,9 @@ export async function getBmadProject(
   // Stories: implementation-artifacts (legacy) ∪ epic-folder-inner stories
   const implStoryPaths = bmadPaths.filter((p) => {
     if (!p.includes(IMPLEMENTATION) || !p.endsWith(".md")) return false;
-    const filename = p.split("/").pop() || "";
-    if (/^epic[-_]/i.test(filename)) return false;
-    if (/^bmad[-_]/i.test(filename)) return false;
-    if (/^\d+-\d+-.+\.md$/.test(filename)) return true;
+    const filename = (p.split("/").pop() || "").replace(STORY_FILE_PREFIX, "");
+    if (NON_STORY_FILE_PREFIX.test(filename)) return false;
+    if (/^\d+-\d+[a-z]?-.+\.md$/i.test(filename)) return true;
     if (/^[a-z][a-z0-9_-]*-\d+-.+\.md$/i.test(filename)) return true;
     if (/^story[_-]?\d/i.test(filename)) return true;
     return false;
@@ -281,7 +287,12 @@ export async function getBmadProject(
     console.warn(`[BMAD Parse] ${owner}/${repo}: ${parseErrors.length} parsing errors out of ${totalFiles} files`);
   }
 
-  const correlated = correlate(sprintStatus, rawEpics, rawStories, epicStatuses);
+  const correlated = correlate(
+    sprintStatus,
+    rawEpics,
+    mergeStoryParts(rawStories),
+    epicStatuses,
+  );
   const epics = [...correlated.epics].sort((a, b) => compareIds(a.id, b.id));
   const stories = correlated.stories;
   const storyPathSet = new Set(storyPaths);

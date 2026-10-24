@@ -51,8 +51,8 @@ export function parseSprintStatus(content: string): ParsedSprintData | null {
           continue;
         }
 
-        // Story entries: "N-N-title: status" or "di-N-title: status"
-        const numericStory = key.match(/^(\d+)-(\d+)-(.+)$/);
+        // Story entries: "N-N-title: status", "N-Nx-title: status" or "di-N-title: status"
+        const numericStory = key.match(/^(\d+)-(\d+[a-z]?)-(.+)$/i);
         const alphaStory = !numericStory
           ? key.match(/^([a-z][a-z0-9_-]*?)-(\d+)-(.+)$/i)
           : null;
@@ -62,7 +62,7 @@ export function parseSprintStatus(content: string): ParsedSprintData | null {
           const epicId = /^\d+$/.test(rawEpicId)
             ? rawEpicId
             : normalizeAlphanumericId(rawEpicId);
-          const storyNum = storyMatch[2];
+          const storyNum = storyMatch[2].toLowerCase();
           const id = `${epicId}.${storyNum}`;
           stories.push({
             id,

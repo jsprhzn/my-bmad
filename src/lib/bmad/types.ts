@@ -30,6 +30,8 @@ export interface Epic {
   description: string;
   status: EpicStatus;
   stories: string[];
+  /** Story titles keyed by story id, from "### Story N.M: Title" headings. */
+  storyTitles?: Record<string, string>;
   totalStories: number;
   completedStories: number;
   progressPercent: number;
@@ -45,6 +47,14 @@ export interface StoryDetail {
    * from the default fallback and sprint-status.yaml may override it.
    */
   statusExplicit?: boolean;
+  /**
+   * Part label when the file holds one part of a story split over several
+   * files ("1-2-part-1-…" → "1", "1-2-parts-2-5-…" → "2-5"). Parts are merged
+   * into a single story before correlation.
+   */
+  part?: string;
+  /** Number of files merged into this story (only set when more than one). */
+  partCount?: number;
   epicId: string;
   epicTitle?: string;
   description: string;

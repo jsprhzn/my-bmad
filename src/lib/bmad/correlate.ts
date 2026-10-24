@@ -6,7 +6,7 @@ import { BmadProject, Epic, SprintStatus, StoryDetail, EpicStatus } from "./type
  */
 function formatStoryTitle(slug: string): string {
   // Remove the leading "N-N-" or "alpha-N-" prefix
-  const withoutPrefix = slug.replace(/^(?:\d+|[a-z][a-z0-9_-]*)-\d+-/i, "");
+  const withoutPrefix = slug.replace(/^(?:\d+|[a-z][a-z0-9_-]*)-\d+[a-z]?-/i, "");
   if (!withoutPrefix || withoutPrefix === slug) return slug;
   return withoutPrefix
     .split("-")
@@ -22,6 +22,40 @@ export function correlate(
 ): { epics: Epic[]; stories: StoryDetail[] } {
   // Work on copies to avoid mutating the input arrays/objects
   let mutableStories = stories.map((s) => ({ ...s }));
+
+  // Story titles declared in the epics file ("### Story 1.2: Title").
+  const epicStoryTitles = new Map<string, string>();
+  for (const epic of epics) {
+    for (const [id, title] of Object.entries(epic.storyTitles ?? {})) {
+      epicStoryTitles.set(id, title);
+    }
+  }
+
+  // A story file may carry a letter variant ("1.3b") of a story that
+  // sprint-status and the epics only know as "1.3". Attach it to that story
+  // when the variant itself is unknown and nothing else claims the base id.
+  const knownIds = new Set<string>([
+    ...(sprintStatus?.stories.map((s) => s.id) ?? []),
+    ...epics.flatMap((e) => e.stories),
+  ]);
+  const fileIds = new Set(mutableStories.map((s) => s.id));
+  for (const s of mutableStories) {
+    const variant = s.id.match(/^(.+\.\d+)[a-z]$/);
+    if (!variant || knownIds.has(s.id)) continue;
+    const baseId = variant[1];
+    if (knownIds.has(baseId) && !fileIds.has(baseId)) {
+      s.id = baseId;
+      fileIds.add(baseId);
+    }
+  }
+
+  for (const s of mutableStories) {
+    if (s.partCount && epicStoryTitles.has(s.id)) {
+      // Merged parts: the first part's title names only that part.
+      s.title = epicStoryTitles.get(s.id)!;
+    }
+  }
+
   const storyMap = new Map<string, StoryDetail>();
   for (const s of mutableStories) {
     storyMap.set(s.id, s);
@@ -45,7 +79,7 @@ export function correlate(
         // Create a stub StoryDetail from the sprint entry
         const stub: StoryDetail = {
           id: entry.id,
-          title: formatStoryTitle(entry.title),
+          title: epicStoryTitles.get(entry.id) ?? formatStoryTitle(entry.title),
           status: entry.status,
           epicId: entry.epicId || "",
           description: "",
