@@ -1,5 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { ModelBadge } from "@/components/shared/model-badge";
 import { MarkdownRenderer } from "@/components/docs/markdown-renderer";
 import { CheckCircle2, Circle } from "lucide-react";
 import { SegmentedProgressBar } from "@/components/shared/segmented-progress-bar";
@@ -24,6 +25,37 @@ export function StoryDetailView({ story, showHeader = true }: StoryDetailViewPro
           </div>
           <StatusBadge status={story.status} />
         </div>
+      )}
+
+      {/* Recommended model */}
+      {story.modelAdvice && (
+        <Card className="glass-card">
+          <CardContent className="p-5 space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Recommended model
+              </h4>
+              <ModelBadge advice={story.modelAdvice} />
+            </div>
+            {story.modelAdvice.reason && (
+              <p className="text-sm text-muted-foreground">{story.modelAdvice.reason}</p>
+            )}
+            {story.modelAdvice.parts && story.modelAdvice.parts.length > 0 && (
+              <ul className="space-y-2">
+                {story.modelAdvice.parts.map((part) => (
+                  <li key={part.id} className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-mono text-xs text-muted-foreground">{part.id}</span>
+                    <span className="font-medium">{part.title ?? part.id}</span>
+                    <ModelBadge advice={part} compact />
+                    {part.reason && (
+                      <span className="text-muted-foreground">{part.reason}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Description */}

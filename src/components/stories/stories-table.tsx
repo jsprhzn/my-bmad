@@ -18,6 +18,7 @@ import {
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 import { DataGridPagination } from "@/components/reui/data-grid/data-grid-pagination";
 import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-column-header";
+import { ModelBadge } from "@/components/shared/model-badge";
 import { StatusBadge } from "@/components/shared/status-badge";
 import type { StoryDetail } from "@/lib/bmad/types";
 
@@ -114,6 +115,16 @@ function getColumns(basePath: string): ColumnDef<StoryDetail>[] {
           {row.getValue("epicTitle") || "-"}
         </span>
       ),
+    },
+    {
+      id: "model",
+      header: "Model",
+      cell: ({ row }) => {
+        const advice = row.original.modelAdvice;
+        if (!advice) return <span className="text-muted-foreground">-</span>;
+        return <ModelBadge advice={advice} compact />;
+      },
+      enableSorting: false,
     },
     {
       accessorKey: "totalTasks",

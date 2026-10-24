@@ -55,6 +55,8 @@ export interface StoryDetail {
   part?: string;
   /** Number of files merged into this story (only set when more than one). */
   partCount?: number;
+  /** Recommended model from a story-complexity table, when the project has one. */
+  modelAdvice?: StoryModelAdvice;
   epicId: string;
   epicTitle?: string;
   description: string;
@@ -62,6 +64,26 @@ export interface StoryDetail {
   tasks: StoryTask[];
   completedTasks: number;
   totalTasks: number;
+}
+
+export type ModelTier = "haiku" | "sonnet" | "opus";
+
+export interface ModelAdviceRow {
+  /** Story id as written in the table ("1.2", "1.2a"). */
+  id: string;
+  title?: string;
+  /** Complexity as written ("S", "M", "L", "XL"). */
+  complexity?: string;
+  /** Model cell as written, e.g. "Opus (core) · Haiku (theme)". */
+  model: string;
+  /** Model tiers named in the model cell, in order. */
+  tiers: ModelTier[];
+  reason?: string;
+}
+
+export interface StoryModelAdvice extends ModelAdviceRow {
+  /** Rows for parts of this story ("1.2a", "1.2b") that are not stories themselves. */
+  parts?: ModelAdviceRow[];
 }
 
 export interface StoryTask {
