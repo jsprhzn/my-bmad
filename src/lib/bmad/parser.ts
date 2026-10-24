@@ -269,6 +269,7 @@ export async function getBmadProject(
             story.id = `${folderEpicId}.${story.id}`;
           }
         }
+        story.sourcePaths = [storyPath];
         rawStories.push(story);
         storyByPath.set(storyPath, story);
       } else {
