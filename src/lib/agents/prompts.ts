@@ -24,6 +24,17 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
       ? `Spec file(s): ${input.sourcePaths.join(", ")}`
       : "The story has no spec file yet; find it in sprint-status and the epics.";
 
+  if (input.kind === "brainstorm") {
+    return [
+      `${command} Brainstorm the open design questions for ${story}. Halt after brainstorming.`,
+      specs,
+      "",
+      "Started from MyBMAD; nobody is watching to answer questions.",
+      "- Settle each open design question yourself and record the decisions where the spec will read them.",
+      "- Do not write the spec and do not implement.",
+    ].join("\n");
+  }
+
   if (input.kind === "plan") {
     // bmad-build-auto sets the spec to ready-for-dev and stops on this phrase.
     return [

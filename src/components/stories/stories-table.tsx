@@ -20,6 +20,7 @@ import { DataGridPagination } from "@/components/reui/data-grid/data-grid-pagina
 import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-column-header";
 import { ModelBadge } from "@/components/shared/model-badge";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { RunningBadge, useRunningStoryIds } from "@/components/agents/running-story";
 import type { StoryDetail } from "@/lib/bmad/types";
 
 function TaskGauge({ completed, total }: { completed: number; total: number }) {
@@ -70,7 +71,7 @@ function storyHref(basePath: string, storyId: string) {
   return `${basePath}/${encodeURIComponent(storyId)}`;
 }
 
-function getColumns(basePath: string): ColumnDef<StoryDetail>[] {
+function getColumns(basePath: string, running: Set<string>): ColumnDef<StoryDetail>[] {
   return [
     {
       accessorKey: "id",
@@ -103,7 +104,12 @@ function getColumns(basePath: string): ColumnDef<StoryDetail>[] {
       header: ({ column }) => (
         <DataGridColumnHeader column={column} title="Status" />
       ),
-      cell: ({ row }) => <StatusBadge status={row.getValue("status")} />,
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <StatusBadge status={row.getValue("status")} />
+          {running.has(row.original.id) && <RunningBadge />}
+        </div>
+      ),
     },
     {
       accessorKey: "epicTitle",
@@ -148,7 +154,8 @@ export function StoriesTable({ stories }: StoriesTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const router = useRouter();
   const pathname = usePathname();
-  const columns = useMemo(() => getColumns(pathname), [pathname]);
+  const running = useRunningStoryIds();
+  const columns = useMemo(() => getColumns(pathname, running), [pathname, running]);
 
   const table = useReactTable({
     data: stories,

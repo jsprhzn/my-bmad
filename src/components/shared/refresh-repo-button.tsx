@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,9 @@ interface RefreshRepoButtonProps {
   name: string;
 }
 
+/** The project is re-synced this often while the page is open. */
+const AUTO_REFRESH_MS = 15000;
+
 function formatFileCount(count: number): string {
   if (count === 0) return "No BMAD files detected.";
   return `${count} BMAD file${count > 1 ? "s" : ""} detected.`;
@@ -27,6 +30,24 @@ function formatFileCount(count: number): string {
 export function RefreshRepoButton({ owner, name }: RefreshRepoButtonProps) {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
+  const autoRunning = useRef(false);
+
+  // Re-sync in the background. Quiet on failure: the last data stays on screen.
+  useEffect(() => {
+    const timer = setInterval(async () => {
+      if (autoRunning.current) return;
+      autoRunning.current = true;
+      try {
+        const res = await refreshRepoData({ owner, name });
+        if (res.success) router.refresh();
+      } catch {
+        // Keep the current data; the next tick tries again.
+      } finally {
+        autoRunning.current = false;
+      }
+    }, AUTO_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [owner, name, router]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [result, setResult] = useState<{
     success: boolean;

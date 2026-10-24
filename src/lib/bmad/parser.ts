@@ -14,6 +14,12 @@ import {
 } from "./utils";
 import { mergeStoryParts } from "./merge-story-parts";
 import { MODEL_ADVICE_FILE, attachModelAdvice, parseModelAdvice } from "./parse-model-advice";
+import {
+  STORY_DEPENDENCIES_FILE,
+  attachStoryGraph,
+  parseStoryDependencies,
+  type StoryGraph,
+} from "./story-graph";
 import { resolveBmadOutputDir } from "./parse-config";
 import { parseEpicFolderName } from "./parse-epic-folder";
 import type { RepoConfig } from "@/lib/types";
@@ -154,6 +160,17 @@ export async function getBmadProject(
     );
   }
 
+  // story-dependencies.yaml: which stories each story needs (optional).
+  const storyDependenciesPath = bmadPaths.find((p) => STORY_DEPENDENCIES_FILE.test(p));
+  if (storyDependenciesPath) {
+    fetches.push(
+      fetchContent(storyDependenciesPath).then((content) => ({
+        key: "story-dependencies",
+        content,
+      }))
+    );
+  }
+
   if (sprintStatusPath) {
     fetches.push(
       fetchContent(sprintStatusPath).then((content) => ({
@@ -197,6 +214,7 @@ export async function getBmadProject(
 
   let sprintStatus = null;
   let modelAdviceRows: ReturnType<typeof parseModelAdvice> = new Map();
+  let storyGraph: StoryGraph = new Map();
   let epicStatuses: { id: string; status: import("./types").EpicStatus }[] = [];
   let rawEpics: import("./types").Epic[] = [];
   const rawStories: NonNullable<ReturnType<typeof parseStory>>[] = [];
@@ -237,6 +255,9 @@ export async function getBmadProject(
     } else if (key === "model-advice") {
       totalFiles++;
       modelAdviceRows = parseModelAdvice(content);
+    } else if (key === "story-dependencies") {
+      totalFiles++;
+      storyGraph = parseStoryDependencies(content);
     } else if (key === "epics") {
       totalFiles++;
       const result = parseEpics(content);
@@ -311,7 +332,10 @@ export async function getBmadProject(
     epicStatuses,
   );
   const epics = [...correlated.epics].sort((a, b) => compareIds(a.id, b.id));
-  const stories = attachModelAdvice(correlated.stories, modelAdviceRows);
+  const stories = attachStoryGraph(
+    attachModelAdvice(correlated.stories, modelAdviceRows),
+    storyGraph,
+  );
   const storyPathSet = new Set(storyPaths);
   const docPaths = bmadPaths.filter((p) => !storyPathSet.has(p));
   const fileTree = buildFileTree(docPaths, outputDir);

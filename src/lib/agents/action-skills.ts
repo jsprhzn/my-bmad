@@ -13,6 +13,7 @@ export interface ProjectSkill {
  * one is the default; the others are offered first as alternatives.
  */
 const SUGGESTED_SKILLS: Record<AgentRunKind, string[]> = {
+  brainstorm: ["bmad-brainstorming", "bmad-forge-idea", "bmad-advanced-elicitation"],
   plan: ["bmad-build-auto", "bmad-build", "bmad-spec", "bmad-create-story", "bmad-agent-dev", "bmad-agent-architect"],
   dev: ["bmad-build-auto", "bmad-dev-story", "bmad-build", "bmad-quick-dev", "bmad-agent-dev"],
   review: ["bmad-code-review", "bmad-review", "bmad-walkthrough", "bmad-qa-generate-e2e-tests"],

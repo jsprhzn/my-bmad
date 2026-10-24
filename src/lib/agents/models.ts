@@ -2,10 +2,14 @@ import type { ModelTier, StoryModelAdvice, StoryStatus } from "@/lib/bmad/types"
 
 export const MODEL_TIERS: ModelTier[] = ["haiku", "sonnet", "opus"];
 
-/** plan writes the spec and stops at ready-for-dev; dev plans (if needed) and builds. */
-export type AgentRunKind = "plan" | "dev" | "review";
+/**
+ * brainstorm settles the open design questions before a spec; plan writes the
+ * spec and stops at ready-for-dev; dev plans (if needed) and builds.
+ */
+export type AgentRunKind = "brainstorm" | "plan" | "dev" | "review";
 
 export const AGENT_RUN_LABELS: Record<AgentRunKind, string> = {
+  brainstorm: "Brainstorm",
   plan: "Plan",
   dev: "Dev",
   review: "Review",
@@ -31,7 +35,7 @@ export function runKindsFor(status: StoryStatus): AgentRunKind[] {
 
 /** Kinds that write the same spec and code, so two of them must not run at once. */
 export function runsConflict(a: AgentRunKind, b: AgentRunKind): boolean {
-  const builds = (k: AgentRunKind) => k === "plan" || k === "dev";
+  const builds = (k: AgentRunKind) => k !== "review";
   return a === b || (builds(a) && builds(b));
 }
 
@@ -64,6 +68,11 @@ export function recommendModel(
   kind: AgentRunKind,
   advice?: StoryModelAdvice,
 ): ModelRecommendation {
+  if (kind === "brainstorm") {
+    // Brainstorming settles the design the spec records: the plan model decides it.
+    const plan = recommendModel("plan", advice);
+    return { model: plan.model, source: `same as plan: ${plan.source}` };
+  }
   if (kind === "plan" && advice?.planTiers?.[0]) {
     return { model: advice.planTiers[0], source: "Plan model in story-complexity.md" };
   }
