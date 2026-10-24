@@ -13,6 +13,7 @@ import {
   normalizeStoryStatus,
 } from "./utils";
 import { mergeStoryParts } from "./merge-story-parts";
+import { MODEL_ADVICE_FILE, attachModelAdvice, parseModelAdvice } from "./parse-model-advice";
 import { resolveBmadOutputDir } from "./parse-config";
 import { parseEpicFolderName } from "./parse-epic-folder";
 import type { RepoConfig } from "@/lib/types";
@@ -142,6 +143,17 @@ export async function getBmadProject(
 
   const fetches: Promise<{ key: string; content: string }>[] = [];
 
+  // story-complexity.md: the recommended model per story (optional).
+  const modelAdvicePath = bmadPaths.find((p) => MODEL_ADVICE_FILE.test(p));
+  if (modelAdvicePath) {
+    fetches.push(
+      fetchContent(modelAdvicePath).then((content) => ({
+        key: "model-advice",
+        content,
+      }))
+    );
+  }
+
   if (sprintStatusPath) {
     fetches.push(
       fetchContent(sprintStatusPath).then((content) => ({
@@ -184,6 +196,7 @@ export async function getBmadProject(
   let totalFiles = 0;
 
   let sprintStatus = null;
+  let modelAdviceRows: ReturnType<typeof parseModelAdvice> = new Map();
   let epicStatuses: { id: string; status: import("./types").EpicStatus }[] = [];
   let rawEpics: import("./types").Epic[] = [];
   const rawStories: NonNullable<ReturnType<typeof parseStory>>[] = [];
@@ -221,6 +234,9 @@ export async function getBmadProject(
       } else {
         parseErrors.push({ file: sprintStatusPath!, error: "Failed to parse sprint status YAML. Check the file syntax.", contentType: "sprint-status" });
       }
+    } else if (key === "model-advice") {
+      totalFiles++;
+      modelAdviceRows = parseModelAdvice(content);
     } else if (key === "epics") {
       totalFiles++;
       const result = parseEpics(content);
@@ -294,7 +310,7 @@ export async function getBmadProject(
     epicStatuses,
   );
   const epics = [...correlated.epics].sort((a, b) => compareIds(a.id, b.id));
-  const stories = correlated.stories;
+  const stories = attachModelAdvice(correlated.stories, modelAdviceRows);
   const storyPathSet = new Set(storyPaths);
   const docPaths = bmadPaths.filter((p) => !storyPathSet.has(p));
   const fileTree = buildFileTree(docPaths, outputDir);

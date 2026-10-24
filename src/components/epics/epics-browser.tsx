@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { ModelBadge } from "@/components/shared/model-badge";
 import { ProgressRing } from "@/components/shared/progress-ring";
 import { SegmentedProgressBar } from "@/components/shared/segmented-progress-bar";
 import { EpicsTimeline } from "./epics-timeline";
@@ -318,6 +319,7 @@ export function EpicsBrowser({
                           </span>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
+                          <ModelBadge advice={story.modelAdvice} compact />
                           {story.totalTasks > 0 && (
                             <span className="text-xs text-muted-foreground">
                               {story.completedTasks}/{story.totalTasks} tasks
