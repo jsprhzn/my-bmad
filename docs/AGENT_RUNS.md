@@ -13,6 +13,16 @@ ENABLE_AGENT_RUNS=true
 
 Restart the server after changing these values. The `claude` CLI must be installed and signed in for the user that runs MyBMAD.
 
+### Claude accounts
+
+Claude Code keeps each account's sign-in with its config folder (`CLAUDE_CONFIG_DIR`). A `claude` signed in with `CLAUDE_CONFIG_DIR` set is not the account a plain `claude` uses, even for the same folder. Name the accounts agents may run as:
+
+```
+AGENT_CLAUDE_ACCOUNTS=work=~/.claude,personal=~/.claude-personal
+```
+
+Runs then get `CLAUDE_CONFIG_DIR` of the chosen account. With more than one, the story page shows an account choice (the first is the default); the run records which account it used. Sign each account in with `CLAUDE_CONFIG_DIR=<folder> claude /login`.
+
 ## How it works
 
 The **Agents** card on a story page has three actions:

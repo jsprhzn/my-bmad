@@ -45,6 +45,8 @@ interface StoryAgentsCardProps {
   unavailableReason: string | null;
   /** The story's runs, loaded with the page. */
   initialRuns: AgentRun[];
+  /** Claude accounts to run as (AGENT_CLAUDE_ACCOUNTS); a choice shows when there are several. */
+  accounts: string[];
 }
 
 /** Start a dev or review run for a story with the recommended model, and follow its runs. */
@@ -56,6 +58,7 @@ export function StoryAgentsCard({
   modelAdvice,
   unavailableReason,
   initialRuns,
+  accounts,
 }: StoryAgentsCardProps) {
   const [models, setModels] = useState<Record<AgentRunKind, ModelTier>>({
     plan: recommendedModel("plan", modelAdvice),
@@ -63,6 +66,7 @@ export function StoryAgentsCard({
     review: recommendedModel("review", modelAdvice),
   });
   const [fixFindings, setFixFindings] = useState(true);
+  const [account, setAccount] = useState<string | undefined>(accounts[0]);
   const [runs, setRuns] = useState<AgentRun[]>(initialRuns);
   const [pending, setPending] = useState<AgentRunKind | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +95,7 @@ export function StoryAgentsCard({
       kind,
       model: models[kind],
       fixFindings,
+      account,
     });
     if (result.success) {
       setRuns((prev) => [result.data, ...prev]);
@@ -116,6 +121,20 @@ export function StoryAgentsCard({
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-4">
+              {accounts.length > 1 && (
+                <Select value={account} onValueChange={setAccount} disabled={pending !== null}>
+                  <SelectTrigger className="w-36" aria-label="Claude account">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((name) => (
+                      <SelectItem key={name} value={name}>
+                        {name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               {actions.map(({ kind, label }) => (
                 <div key={kind} className="flex items-center gap-2">
                   <Select
@@ -169,6 +188,7 @@ export function StoryAgentsCard({
                       className="font-medium hover:underline"
                     >
                       {AGENT_RUN_LABELS[run.kind]} · {run.model}
+                      {run.account && accounts.length > 1 && ` · ${run.account}`}
                     </Link>
                     <span className="text-muted-foreground">
                       {new Date(run.startedAt).toLocaleString()}

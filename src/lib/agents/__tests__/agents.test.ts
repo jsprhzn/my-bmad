@@ -123,3 +123,20 @@ describe("stream formatting", () => {
     expect(readStreamResult("still running")).toBeNull();
   });
 });
+
+describe("parseClaudeAccounts", () => {
+  it("reads named config folders and expands ~", async () => {
+    const { parseClaudeAccounts } = await import("../accounts");
+    const os = await import("node:os");
+    expect(parseClaudeAccounts("work=~/.claude, personal=/opt/claude-2")).toEqual([
+      { name: "work", configDir: `${os.homedir()}/.claude` },
+      { name: "personal", configDir: "/opt/claude-2" },
+    ]);
+  });
+
+  it("skips malformed and duplicate entries", async () => {
+    const { parseClaudeAccounts } = await import("../accounts");
+    expect(parseClaudeAccounts("")).toEqual([]);
+    expect(parseClaudeAccounts("=x,bad name=/a,ok=/b,ok=/c").map((a) => a.name)).toEqual(["ok"]);
+  });
+});
