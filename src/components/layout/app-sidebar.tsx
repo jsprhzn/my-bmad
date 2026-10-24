@@ -199,9 +199,6 @@ export function AppSidebar({ repos, showAdmin, localFsEnabled, githubEnabled }: 
         <div className="border-t border-border/50 pt-2">
           <UserMenu />
         </div>
-        <div className="border-t border-border/50 pt-2 pb-1 text-center group-data-[collapsible=icon]:hidden">
-          <p className="text-xs text-muted-foreground">Made with ❤️ by Hichem</p>
-        </div>
       </SidebarFooter>
     </Sidebar>
   );
