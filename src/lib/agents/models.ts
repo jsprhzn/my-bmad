@@ -49,7 +49,42 @@ export function reviewModelFor(advice?: StoryModelAdvice): ModelTier {
   return MODEL_TIERS[Math.min(dev + 1, MODEL_TIERS.length - 1)];
 }
 
-/** Planning uses the build model: the spec decides what gets built. */
+export interface ModelRecommendation {
+  model: ModelTier;
+  /** Where the recommendation comes from, for the UI. */
+  source: string;
+}
+
+/**
+ * The model for an action. story-complexity.md may name one per action
+ * (Plan model / Review model columns); otherwise planning uses the build
+ * model (the spec decides what gets built) and review one tier above it.
+ */
+export function recommendModel(
+  kind: AgentRunKind,
+  advice?: StoryModelAdvice,
+): ModelRecommendation {
+  if (kind === "plan" && advice?.planTiers?.[0]) {
+    return { model: advice.planTiers[0], source: "Plan model in story-complexity.md" };
+  }
+  if (kind === "review" && advice?.reviewTiers?.[0]) {
+    return { model: advice.reviewTiers[0], source: "Review model in story-complexity.md" };
+  }
+  if (!advice?.tiers[0]) {
+    return {
+      model: kind === "review" ? reviewModelFor(advice) : DEFAULT_DEV_MODEL,
+      source: "default (no row in story-complexity.md)",
+    };
+  }
+  if (kind === "review") {
+    return { model: reviewModelFor(advice), source: "one tier above the build model" };
+  }
+  return {
+    model: devModelFor(advice),
+    source: kind === "plan" ? "build model (no Plan model column)" : "Model in story-complexity.md",
+  };
+}
+
 export function recommendedModel(kind: AgentRunKind, advice?: StoryModelAdvice): ModelTier {
-  return kind === "review" ? reviewModelFor(advice) : devModelFor(advice);
+  return recommendModel(kind, advice).model;
 }

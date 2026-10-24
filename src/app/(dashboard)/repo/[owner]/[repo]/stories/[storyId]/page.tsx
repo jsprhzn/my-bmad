@@ -14,6 +14,7 @@ import { StoryAgentsCard } from "@/components/agents/story-agents-card";
 import { agentRunsEnabled } from "@/lib/agents/run-store";
 import { listAgentRuns } from "@/actions/agent-actions";
 import { claudeAccounts } from "@/lib/agents/accounts";
+import { listProjectSkills } from "@/lib/agents/project-skills";
 
 interface StoryPageProps {
   params: Promise<{ owner: string; repo: string; storyId: string }>;
@@ -44,6 +45,8 @@ export default async function StoryPage({ params }: StoryPageProps) {
   const runsResult = agentsUnavailable
     ? null
     : await listAgentRuns({ owner, name: repoName, storyId: story.id });
+  const skills =
+    agentsUnavailable || !repoConfig.localPath ? [] : await listProjectSkills(repoConfig.localPath);
 
   return (
     <div className="space-y-8 pb-8">
@@ -76,6 +79,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
         unavailableReason={agentsUnavailable}
         initialRuns={runsResult?.success ? runsResult.data : []}
         accounts={claudeAccounts().map((a) => a.name)}
+        skills={skills}
       />
       <StoryDetailView story={story} showHeader={false} />
     </div>

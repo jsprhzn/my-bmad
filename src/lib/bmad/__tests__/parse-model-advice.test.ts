@@ -90,3 +90,24 @@ describe("attachModelAdvice", () => {
     expect(stories[1].modelAdvice?.tiers).toEqual(["haiku"]);
   });
 });
+
+describe("parseModelAdvice — models per action", () => {
+  it("reads optional Plan model and Review model columns", () => {
+    const rows = parseModelAdvice(
+      "| Story | Model | Plan model | Review model |\n|---|---|---|---|\n| 2.1 | Sonnet | Opus | Opus |\n| 2.2 | Haiku | | |\n",
+    );
+    expect(rows.get("2.1")).toMatchObject({
+      tiers: ["sonnet"],
+      planModel: "Opus",
+      planTiers: ["opus"],
+      reviewTiers: ["opus"],
+    });
+    expect(rows.get("2.2")?.planTiers).toBeUndefined();
+  });
+
+  it("takes a Dev model column as the build model", () => {
+    const rows = parseModelAdvice("| Story | Dev model | Review |\n|---|---|---|\n| 3.1 | Haiku | Sonnet |\n");
+    expect(rows.get("3.1")?.tiers).toEqual(["haiku"]);
+    expect(rows.get("3.1")?.reviewTiers).toEqual(["sonnet"]);
+  });
+});

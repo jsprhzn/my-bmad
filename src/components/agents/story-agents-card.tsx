@@ -9,7 +9,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -19,19 +21,24 @@ import { listAgentRuns, startAgentRun } from "@/actions/agent-actions";
 import {
   AGENT_RUN_LABELS,
   MODEL_TIERS,
-  recommendedModel,
+  recommendModel,
   runKindsFor,
   type AgentRunKind,
 } from "@/lib/agents/models";
+import {
+  defaultSkillFor,
+  skillsForAction,
+  type ProjectSkill,
+} from "@/lib/agents/action-skills";
 import type { AgentRun } from "@/lib/agents/run-store";
 import type { ModelTier, StoryModelAdvice, StoryStatus } from "@/lib/bmad/types";
 
 const POLL_MS = 5000;
 
-const ACTIONS: { kind: AgentRunKind; label: string }[] = [
-  { kind: "plan", label: "Plan" },
-  { kind: "dev", label: "Start dev" },
-  { kind: "review", label: "Start review" },
+const ACTIONS: { kind: AgentRunKind; label: string; button: string }[] = [
+  { kind: "plan", label: "Plan", button: "Plan" },
+  { kind: "dev", label: "Dev", button: "Start dev" },
+  { kind: "review", label: "Review", button: "Start review" },
 ];
 
 interface StoryAgentsCardProps {
@@ -47,9 +54,20 @@ interface StoryAgentsCardProps {
   initialRuns: AgentRun[];
   /** Claude accounts to run as (AGENT_CLAUDE_ACCOUNTS); a choice shows when there are several. */
   accounts: string[];
+  /** Skills and BMAD agents installed in the project folder. */
+  skills: ProjectSkill[];
 }
 
-/** Start a dev or review run for a story with the recommended model, and follow its runs. */
+function SkillLabel({ skill }: { skill: ProjectSkill }) {
+  return (
+    <>
+      /{skill.name}
+      {skill.persona && <span className="ml-1 text-xs text-muted-foreground">agent</span>}
+    </>
+  );
+}
+
+/** Start a plan, dev or review run with a chosen skill and model, and follow the story's runs. */
 export function StoryAgentsCard({
   owner,
   repo,
@@ -59,11 +77,22 @@ export function StoryAgentsCard({
   unavailableReason,
   initialRuns,
   accounts,
+  skills,
 }: StoryAgentsCardProps) {
+  const recommendations = {
+    plan: recommendModel("plan", modelAdvice),
+    dev: recommendModel("dev", modelAdvice),
+    review: recommendModel("review", modelAdvice),
+  };
   const [models, setModels] = useState<Record<AgentRunKind, ModelTier>>({
-    plan: recommendedModel("plan", modelAdvice),
-    dev: recommendedModel("dev", modelAdvice),
-    review: recommendedModel("review", modelAdvice),
+    plan: recommendations.plan.model,
+    dev: recommendations.dev.model,
+    review: recommendations.review.model,
+  });
+  const [chosenSkills, setChosenSkills] = useState<Record<AgentRunKind, string | null>>({
+    plan: defaultSkillFor("plan", skills),
+    dev: defaultSkillFor("dev", skills),
+    review: defaultSkillFor("review", skills),
   });
   const [fixFindings, setFixFindings] = useState(true);
   const [account, setAccount] = useState<string | undefined>(accounts[0]);
@@ -86,6 +115,8 @@ export function StoryAgentsCard({
   }, [anyRunning, loadRuns]);
 
   const start = async (kind: AgentRunKind) => {
+    const skill = chosenSkills[kind];
+    if (!skill) return;
     setPending(kind);
     setError(null);
     const result = await startAgentRun({
@@ -93,6 +124,7 @@ export function StoryAgentsCard({
       name: repo,
       storyId,
       kind,
+      skill,
       model: models[kind],
       fixFindings,
       account,
@@ -114,62 +146,113 @@ export function StoryAgentsCard({
             Agents
           </h4>
           {modelAdvice && <ModelBadge advice={modelAdvice} compact />}
+          {!unavailableReason && accounts.length > 1 && (
+            <Select value={account} onValueChange={setAccount} disabled={pending !== null}>
+              <SelectTrigger className="ml-auto w-36" aria-label="Claude account">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {accounts.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {unavailableReason ? (
           <p className="text-sm text-muted-foreground">{unavailableReason}</p>
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-4">
-              {accounts.length > 1 && (
-                <Select value={account} onValueChange={setAccount} disabled={pending !== null}>
-                  <SelectTrigger className="w-36" aria-label="Claude account">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {accounts.map((name) => (
-                      <SelectItem key={name} value={name}>
-                        {name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              {actions.map(({ kind, label }) => (
-                <div key={kind} className="flex items-center gap-2">
-                  <Select
-                    value={models[kind]}
-                    onValueChange={(value) =>
-                      setModels((prev) => ({ ...prev, [kind]: value as ModelTier }))
-                    }
-                    disabled={pending !== null}
-                  >
-                    <SelectTrigger className="w-28" aria-label={`Model for ${label.toLowerCase()}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MODEL_TIERS.map((tier) => (
-                        <SelectItem key={tier} value={tier} className="capitalize">
-                          {tier}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button onClick={() => void start(kind)} disabled={pending !== null}>
-                    {pending === kind && <Loader2 className="animate-spin" />}
-                    {label}
-                  </Button>
-                </div>
-              ))}
-              {kinds.includes("review") && (
-                <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Checkbox
-                    checked={fixFindings}
-                    onCheckedChange={(checked) => setFixFindings(checked === true)}
-                  />
-                  Review fixes its findings
-                </label>
-              )}
+            <div className="space-y-4">
+              {actions.map(({ kind, label, button }) => {
+                const { suggested, other } = skillsForAction(kind, skills);
+                const skill = skills.find((s) => s.name === chosenSkills[kind]);
+                return (
+                  <div key={kind} className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="w-16 text-sm font-medium">{label}</span>
+                      <Select
+                        value={chosenSkills[kind] ?? undefined}
+                        onValueChange={(value) =>
+                          setChosenSkills((prev) => ({ ...prev, [kind]: value }))
+                        }
+                        disabled={pending !== null || skills.length === 0}
+                      >
+                        <SelectTrigger className="w-64" aria-label={`Skill for ${label.toLowerCase()}`}>
+                          <SelectValue placeholder="No skill installed" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {suggested.length > 0 && (
+                            <SelectGroup>
+                              <SelectLabel>Suggested for {label.toLowerCase()}</SelectLabel>
+                              {suggested.map((s) => (
+                                <SelectItem key={s.name} value={s.name}>
+                                  <SkillLabel skill={s} />
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          )}
+                          {other.length > 0 && (
+                            <SelectGroup>
+                              <SelectLabel>Other installed skills</SelectLabel>
+                              {other.map((s) => (
+                                <SelectItem key={s.name} value={s.name}>
+                                  <SkillLabel skill={s} />
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={models[kind]}
+                        onValueChange={(value) =>
+                          setModels((prev) => ({ ...prev, [kind]: value as ModelTier }))
+                        }
+                        disabled={pending !== null}
+                      >
+                        <SelectTrigger className="w-28" aria-label={`Model for ${label.toLowerCase()}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MODEL_TIERS.map((tier) => (
+                            <SelectItem key={tier} value={tier} className="capitalize">
+                              {tier}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        onClick={() => void start(kind)}
+                        disabled={pending !== null || !chosenSkills[kind]}
+                      >
+                        {pending === kind && <Loader2 className="animate-spin" />}
+                        {button}
+                      </Button>
+                    </div>
+                    <p className="pl-18 text-xs text-muted-foreground">
+                      Recommended model: {recommendations[kind].model} ({recommendations[kind].source})
+                      {skill?.description && (
+                        <>
+                          <br />/{skill.name}: {skill.description}
+                        </>
+                      )}
+                    </p>
+                    {kind === "review" && (
+                      <label className="flex items-center gap-2 pl-18 text-sm text-muted-foreground">
+                        <Checkbox
+                          checked={fixFindings}
+                          onCheckedChange={(checked) => setFixFindings(checked === true)}
+                        />
+                        Review fixes its findings
+                      </label>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             {error && (
@@ -187,7 +270,8 @@ export function StoryAgentsCard({
                       href={`/repo/${owner}/${repo}/runs/${run.id}`}
                       className="font-medium hover:underline"
                     >
-                      {AGENT_RUN_LABELS[run.kind]} · {run.model}
+                      {AGENT_RUN_LABELS[run.kind]}
+                      {run.skill && ` · /${run.skill}`} · {run.model}
                       {run.account && accounts.length > 1 && ` · ${run.account}`}
                     </Link>
                     <span className="text-muted-foreground">

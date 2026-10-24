@@ -2,6 +2,8 @@ import type { AgentRunKind } from "./models";
 
 export interface AgentPromptInput {
   kind: AgentRunKind;
+  /** The skill (or BMAD agent) the run starts with, without the slash. */
+  skill: string;
   storyId: string;
   storyTitle: string;
   /** Project-relative paths of the story's spec file(s). */
@@ -16,6 +18,7 @@ export interface AgentPromptInput {
  */
 export function buildAgentPrompt(input: AgentPromptInput): string {
   const story = `story ${input.storyId} (${input.storyTitle})`;
+  const command = `/${input.skill}`;
   const specs =
     input.sourcePaths.length > 0
       ? `Spec file(s): ${input.sourcePaths.join(", ")}`
@@ -24,18 +27,18 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
   if (input.kind === "plan") {
     // bmad-build-auto sets the spec to ready-for-dev and stops on this phrase.
     return [
-      `/bmad-build-auto Plan ${story}. Halt after planning.`,
+      `${command} Plan ${story}. Halt after planning.`,
       specs,
       "",
       "Started from MyBMAD; nobody is watching to answer questions.",
-      "- Write or complete the spec only; do not implement.",
+      "- Write or complete the spec only, set its status to ready-for-dev, and stop; do not implement.",
       "- Make every decision yourself; halt with a clear status only when truly blocked.",
     ].join("\n");
   }
 
   if (input.kind === "dev") {
     return [
-      `/bmad-build-auto Build ${story}.`,
+      `${command} Build ${story}.`,
       specs,
       "",
       "Started from MyBMAD; nobody is watching to answer questions.",
@@ -44,7 +47,7 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
   }
 
   return [
-    `/bmad-code-review Review the changes for ${story}.`,
+    `${command} Review the changes for ${story}.`,
     specs,
     "",
     "Started from MyBMAD; nobody is watching to answer questions. Do not halt at any checkpoint.",
