@@ -28,6 +28,7 @@ import {
   getRun,
   isAlive,
   listRuns,
+  readRunStream,
   setRunPaused,
   startRun,
   stopRun,
@@ -41,6 +42,12 @@ import {
   writeAutorunner,
   type AutorunnerState,
 } from "@/lib/agents/autorunner-queue";
+import {
+  logTail,
+  reachedStages,
+  stagesOf,
+  type StageView,
+} from "@/lib/agents/run-stages";
 import type { ActionResult } from "@/lib/types";
 
 const repoSchema = z.object({
@@ -410,6 +417,19 @@ const autorunnerStartSchema = repoSchema.extend({
 });
 
 /** The queue's state as the page shows it: whether its driver is still alive. */
+/** A story the queue is working on now: its stages, models and the last lines of its run. */
+export interface AutorunnerStoryView {
+  key: string;
+  number: string;
+  title: string;
+  phase: "build" | "review";
+  runId: string;
+  paused: boolean;
+  startedAt: string;
+  stages: StageView[];
+  logTail: string[];
+}
+
 export interface AutorunnerView extends Omit<AutorunnerState, "userId" | "localPath" | "runIds"> {
   driverAlive: boolean;
   /** Runs the queue started, and their totals so far. */
@@ -417,6 +437,8 @@ export interface AutorunnerView extends Omit<AutorunnerState, "userId" | "localP
   costUsd: number;
   inputTokens: number;
   outputTokens: number;
+  /** The stories in progress; only filled for a running queue. */
+  stories: AutorunnerStoryView[];
 }
 
 /** The queue as the page shows it; the totals come from the runs it started. */
@@ -435,7 +457,59 @@ function viewOf(state: AutorunnerState, runs: AgentRun[]): AutorunnerView {
     costUsd: sum((r) => r.costUsd),
     inputTokens: sum((r) => r.inputTokens),
     outputTokens: sum((r) => r.outputTokens),
+    stories: [],
   };
+}
+
+function titleOf(key: string): string {
+  const words = key.replace(/^\d+-\d+[a-z]?-/, "").replace(/-/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** The stories the queue has in progress, with their stages read from the runs. Newest runs first in `runs`. */
+async function storyViewsOf(state: AutorunnerState, runs: AgentRun[]): Promise<AutorunnerStoryView[]> {
+  return Promise.all(
+    state.active.map(async (story): Promise<AutorunnerStoryView> => {
+      const run = runs.find((r) => r.id === story.runId);
+      const stream = await readRunStream(story.runId);
+      const reached = story.phase === "review" ? [] : reachedStages(stream);
+      const forStory = runs.filter((r) => r.storyId === story.number);
+      const latest = (kind: AgentRun["kind"]) => forStory.find((r) => r.kind === kind);
+      const build = latest("dev");
+      const review = latest("review");
+      const brainstorm = latest("brainstorm");
+      const plan = latest("plan");
+      const running = run?.status === "running";
+      const current = !running
+        ? null
+        : story.phase === "review"
+          ? "review"
+          : (reached.at(-1) ?? "build");
+      return {
+        key: story.key,
+        number: story.number,
+        title: titleOf(story.key),
+        phase: story.phase,
+        runId: story.runId,
+        paused: run?.paused ?? false,
+        startedAt: run?.startedAt ?? state.startedAt,
+        stages: stagesOf({
+          current,
+          reached,
+          buildDone: story.phase === "review",
+          models: {
+            brainstorm: brainstorm?.model ?? story.models?.brainstorm,
+            plan: plan?.model ?? story.models?.plan,
+            build: build?.model ?? story.models?.dev,
+            review: review?.model ?? story.models?.review,
+          },
+          hasBrainstorm: Boolean(brainstorm),
+          hasPlan: Boolean(plan),
+        }),
+        logTail: logTail(stream, 3),
+      };
+    }),
+  );
 }
 
 /** Start the autorunner for the project: it takes open stories one by one, or a few at once, in auto mode. */
@@ -474,6 +548,7 @@ export async function startAutorunner(
       active: [],
       waiting: [],
       done: [],
+      skipped: [],
       runIds: [],
       note: null,
     };
@@ -527,6 +602,32 @@ export async function stopAutorunner(
   }
 }
 
+/** Pause or resume every run the queue has in progress. */
+export async function setAutorunnerPaused(
+  input: z.infer<typeof repoSchema> & { id: string; paused: boolean },
+): Promise<ActionResult<void>> {
+  const parsed = repoSchema
+    .extend({ id: z.string().regex(/^\d{13}-[0-9a-f]{8}$/), paused: z.boolean() })
+    .safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
+  }
+  const access = await requireAgentProject(parsed.data.owner, parsed.data.name);
+  if (!access.success) return access;
+  try {
+    const state = await readAutorunner(autorunnerFile(parsed.data.id));
+    if (!state || state.repoKey !== access.data.repoKey || state.userId !== access.data.userId) {
+      return { success: false, error: "Autorunner not found", code: "NOT_FOUND" };
+    }
+    for (const story of state.active) {
+      await setRunPaused(story.runId, access.data, parsed.data.paused);
+    }
+    return { success: true, data: undefined };
+  } catch (error) {
+    return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
+  }
+}
+
 /** The project's autorunner queues, newest first. */
 export async function listAutorunnerViews(
   input: z.infer<typeof repoSchema>,
@@ -540,7 +641,14 @@ export async function listAutorunnerViews(
   try {
     const states = await listAutorunners(access.data.repoKey, access.data.userId);
     const runs = await listRuns({ repoKey: access.data.repoKey, userId: access.data.userId });
-    return { success: true, data: states.slice(0, 5).map((state) => viewOf(state, runs)) };
+    const views = await Promise.all(
+      states.slice(0, 5).map(async (state) => {
+        const view = viewOf(state, runs);
+        if (state.status === "running") view.stories = await storyViewsOf(state, runs);
+        return view;
+      }),
+    );
+    return { success: true, data: views };
   } catch (error) {
     return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
   }
