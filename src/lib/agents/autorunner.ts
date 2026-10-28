@@ -9,6 +9,7 @@ import { findClaudeAccount, type ClaudeAccount } from "./accounts";
 import {
   MAX_ATTEMPTS,
   MAX_PARALLEL,
+  canStart,
   nextStories,
   readAutorunner,
   readSprintStories,
@@ -203,7 +204,7 @@ export async function runAutorunner(file: string): Promise<void> {
     const failed = state.failed || failure !== null;
     const failNote = failure ?? (state.failed ? state.note : null);
     const pending = stopping ? [] : waiting;
-    const openLeft = project.stories.filter((s) => s.status === "backlog" || s.status === "ready-for-dev");
+    const openLeft = project.stories.filter((s) => canStart(s.status));
     const nextWait = Math.min(...pending.map((w) => Date.parse(w.at)));
 
     if (active.length === 0 && (stopping || pending.length === 0) && !(throttled && openLeft.length > 0)) {
