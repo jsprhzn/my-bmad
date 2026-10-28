@@ -101,8 +101,16 @@ export function AgentRunView({ owner, repo, initial }: AgentRunViewProps) {
 
       <Card className="glass-card min-h-0 flex-1 gap-0 py-0">
         <CardContent className="flex min-h-0 flex-1 flex-col p-4">
-          <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+          <h4 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
             Log
+            {run.status === "running" && (
+              <span
+                role="status"
+                aria-label="Bezig"
+                title="Bezig"
+                className="size-2 animate-pulse rounded-full bg-success"
+              />
+            )}
           </h4>
           <div ref={logScroll} className="min-h-0 flex-1 overflow-y-scroll pr-2">
             <RunLog
