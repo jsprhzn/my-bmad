@@ -457,7 +457,15 @@ export function parseBmadFile(
   try {
     switch (contentType) {
       case "markdown": {
-        const { data, content: body } = matter(content);
+        // A broken frontmatter block must not turn the whole document into raw
+        // code: drop the block and still render the markdown body.
+        let data: Record<string, unknown> = {};
+        let body: string;
+        try {
+          ({ data, content: body } = matter(content));
+        } catch {
+          body = content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+        }
         const frontmatter =
           data && Object.keys(data).length > 0 ? data : null;
         return {
