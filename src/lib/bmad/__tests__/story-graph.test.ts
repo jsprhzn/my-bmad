@@ -100,11 +100,26 @@ describe("attachStoryGraph", () => {
       story("2-2-post", "backlog"),
       story("9-9-unknown", "backlog"),
     ];
-    const [, , chart, , unknown] = attachStoryGraph(stories, graph);
-    expect(chart.dependsOn).toEqual(["1.1", "1.2"]);
+    const [, , chart, post, unknown] = attachStoryGraph(stories, graph);
+    // Only the direct needs: 2.1 needs 1.2, and 1.2 needing 1.1 is not shown again.
+    expect(chart.dependsOn).toEqual(["1.2"]);
+    expect(post.dependsOn).toEqual(["2.1"]);
     // 2.2 needs 2.1, so only 9.9 (open, unrelated, no listed needs) runs alongside it.
     expect(chart.parallelWith).toEqual(["9.9"]);
     expect(unknown.dependsOn).toBeUndefined();
+  });
+
+  it("offers no parallel work for a story that is done or in review", () => {
+    const graph = parseStoryDependencies(YAML);
+    const stories = [
+      story("1-1-scaffold", "done"),
+      story("1-2-sign-up", "done"),
+      story("2-1-chart", "review"),
+      story("9-9-unknown", "backlog"),
+    ];
+    const [, done, review] = attachStoryGraph(stories, graph);
+    expect(done.parallelWith).toEqual([]);
+    expect(review.parallelWith).toEqual([]);
   });
 
   it("leaves stories alone when there is no dependency file", () => {

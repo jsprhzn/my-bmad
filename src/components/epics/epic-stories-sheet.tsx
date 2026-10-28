@@ -157,7 +157,7 @@ export function EpicStoriesSheet({
                           </span>
                         )}
                         <StatusBadge status={story.status} />
-                        {running.has(story.id) && <RunningBadge />}
+                        {running.has(story.id) && <RunningBadge href={running.get(story.id)} />}
                       </div>
                     </div>
                   </CardContent>

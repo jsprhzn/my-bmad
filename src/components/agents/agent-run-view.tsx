@@ -1,11 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { RunLog } from "./run-log";
 import { RunStatusBadge } from "./run-status-badge";
-import { getAgentRun, stopAgentRun } from "@/actions/agent-actions";
+import { getAgentRun, replyAgentRun, stopAgentRun } from "@/actions/agent-actions";
 import type { AgentRun } from "@/lib/agents/run-store";
 
 const POLL_MS = 3000;
@@ -13,15 +16,18 @@ const POLL_MS = 3000;
 interface AgentRunViewProps {
   owner: string;
   repo: string;
-  initial: { run: AgentRun; log: string; prompt: string };
+  initial: { run: AgentRun; log: string; prompt: string; sessionId: string | null };
 }
 
-/** A run's status and log, refreshed while it runs, with a stop button. */
+/** A run's status and log, refreshed while it runs, with a stop button and a reply box once it ends. */
 export function AgentRunView({ owner, repo, initial }: AgentRunViewProps) {
+  const router = useRouter();
   const [data, setData] = useState(initial);
   const [stopping, setStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const logEnd = useRef<HTMLSpanElement>(null);
+  const [answer, setAnswer] = useState("");
+  const [replying, setReplying] = useState(false);
+  const logScroll = useRef<HTMLDivElement>(null);
   const { run } = data;
 
   const reload = useCallback(async () => {
@@ -36,7 +42,8 @@ export function AgentRunView({ owner, repo, initial }: AgentRunViewProps) {
   }, [run.status, reload]);
 
   useEffect(() => {
-    if (run.status === "running") logEnd.current?.scrollIntoView({ block: "end" });
+    const scroll = logScroll.current;
+    if (run.status === "running" && scroll) scroll.scrollTop = scroll.scrollHeight;
   }, [data.log, run.status]);
 
   const stop = async () => {
@@ -48,8 +55,17 @@ export function AgentRunView({ owner, repo, initial }: AgentRunViewProps) {
     setStopping(false);
   };
 
+  const reply = async (text = answer) => {
+    setReplying(true);
+    setError(null);
+    const result = await replyAgentRun({ owner, name: repo, runId: run.id, answer: text });
+    if (result.success) router.push(`/repo/${owner}/${repo}/runs/${result.data.id}`);
+    else setError(result.error);
+    setReplying(false);
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="flex h-[calc(100dvh-8rem)] min-h-[32rem] flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <RunStatusBadge status={run.status} />
         <span className="text-sm text-muted-foreground">
@@ -72,21 +88,9 @@ export function AgentRunView({ owner, repo, initial }: AgentRunViewProps) {
         </p>
       )}
 
-      <Card className="glass-card">
-        <CardContent className="p-5">
-          <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-            Log
-          </h4>
-          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
-            {data.log || (run.status === "running" ? "Waiting for output…" : "No output.")}
-            <span ref={logEnd} />
-          </pre>
-        </CardContent>
-      </Card>
-
-      <Card className="glass-card">
-        <CardContent className="p-5">
-          <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+      <Card className="glass-card shrink-0 gap-0 py-0">
+        <CardContent className="p-4">
+          <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
             Prompt
           </h4>
           <pre className="whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
@@ -94,6 +98,50 @@ export function AgentRunView({ owner, repo, initial }: AgentRunViewProps) {
           </pre>
         </CardContent>
       </Card>
+
+      <Card className="glass-card min-h-0 flex-1 gap-0 py-0">
+        <CardContent className="flex min-h-0 flex-1 flex-col p-4">
+          <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+            Log
+          </h4>
+          <div ref={logScroll} className="min-h-0 flex-1 overflow-y-scroll pr-2">
+            <RunLog
+              log={data.log}
+              emptyText={run.status === "running" ? "Waiting for output…" : "No output."}
+              onChoose={
+                run.status !== "running" && data.sessionId && !replying
+                  ? (text) => void reply(text)
+                  : undefined
+              }
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {run.status !== "running" && data.sessionId && (
+        <Card className="glass-card shrink-0 gap-0 py-0">
+          <CardContent className="p-4">
+            <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+              Answer
+            </h4>
+            <div className="flex flex-col gap-3">
+              <Textarea
+                value={answer}
+                onChange={(event) => setAnswer(event.target.value)}
+                placeholder="Reply to Claude; the run continues in the same session."
+                rows={3}
+                disabled={replying}
+              />
+              <div>
+                <Button onClick={() => void reply()} disabled={replying || !answer.trim()}>
+                  {replying && <Loader2 className="animate-spin" />}
+                  Send answer
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

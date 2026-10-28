@@ -24,34 +24,41 @@ import { RunningBadge, useRunningStoryIds } from "@/components/agents/running-st
 import type { StoryDetail } from "@/lib/bmad/types";
 import { storyNumber } from "@/lib/bmad/story-number";
 
-/** Story numbers ("1.3") as small chips; a number that is in this list links to its story. */
+const CHIP = "rounded-md border border-border px-1.5 py-0.5 text-xs text-muted-foreground";
+
+/** Story numbers ("1.3") as quiet chips; a number that is in this list links to its story. */
 function NumberChips({
   numbers,
   hrefFor,
-  muted,
+  statusOf,
+  max,
 }: {
   numbers: string[];
   hrefFor: (number: string) => string | null;
-  muted: boolean;
+  /** A done story gets a green border, like the Done badge. */
+  statusOf?: (number: string) => string | null;
+  /** Show this many chips and count the rest as "+N". */
+  max?: number;
 }) {
   if (numbers.length === 0) return <span className="text-muted-foreground">-</span>;
-  const chipClass = `rounded-md border px-1.5 py-0.5 text-xs ${
-    muted ? "border-border text-muted-foreground" : "border-primary/40 text-primary"
-  }`;
+  const shown = max ? numbers.slice(0, max) : numbers;
+  const rest = numbers.length - shown.length;
   return (
     <span className="flex flex-wrap gap-1">
-      {numbers.map((number) => {
+      {shown.map((number) => {
         const href = hrefFor(number);
+        const className = statusOf?.(number) === "done" ? `${CHIP} border-success/50` : CHIP;
         return href ? (
-          <Link key={number} href={href} onClick={(e) => e.stopPropagation()} className={chipClass}>
+          <Link key={number} href={href} onClick={(e) => e.stopPropagation()} className={className}>
             {number}
           </Link>
         ) : (
-          <span key={number} className={chipClass}>
+          <span key={number} className={className}>
             {number}
           </span>
         );
       })}
+      {rest > 0 && <span className={CHIP}>+{rest}</span>}
     </span>
   );
 }
@@ -106,13 +113,14 @@ function storyHref(basePath: string, storyId: string) {
 
 function getColumns(
   basePath: string,
-  running: Set<string>,
-  idByNumber: Map<string, string>,
+  running: Map<string, string>,
+  storyByNumber: Map<string, StoryDetail>,
 ): ColumnDef<StoryDetail>[] {
   const hrefFor = (number: string) => {
-    const id = idByNumber.get(number);
-    return id ? storyHref(basePath, id) : null;
+    const story = storyByNumber.get(number);
+    return story ? storyHref(basePath, story.id) : null;
   };
+  const statusOf = (number: string) => storyByNumber.get(number)?.status ?? null;
   return [
     {
       accessorKey: "id",
@@ -148,7 +156,7 @@ function getColumns(
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
           <StatusBadge status={row.getValue("status")} />
-          {running.has(row.original.id) && <RunningBadge />}
+          {running.has(row.original.id) && <RunningBadge href={running.get(row.original.id)} />}
         </div>
       ),
     },
@@ -156,7 +164,11 @@ function getColumns(
       id: "dependsOn",
       header: "Depends on",
       cell: ({ row }) => (
-        <NumberChips numbers={row.original.dependsOn ?? []} hrefFor={hrefFor} muted={false} />
+        <NumberChips
+          numbers={row.original.dependsOn ?? []}
+          hrefFor={hrefFor}
+          statusOf={statusOf}
+        />
       ),
       enableSorting: false,
     },
@@ -164,20 +176,9 @@ function getColumns(
       id: "parallelWith",
       header: "Can run now",
       cell: ({ row }) => (
-        <NumberChips numbers={row.original.parallelWith ?? []} hrefFor={hrefFor} muted />
+        <NumberChips numbers={row.original.parallelWith ?? []} hrefFor={hrefFor} max={3} />
       ),
       enableSorting: false,
-    },
-    {
-      accessorKey: "epicTitle",
-      header: ({ column }) => (
-        <DataGridColumnHeader column={column} title="Epic" />
-      ),
-      cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
-          {row.getValue("epicTitle") || "-"}
-        </span>
-      ),
     },
     {
       id: "model",
@@ -205,24 +206,60 @@ function getColumns(
 
 interface StoriesTableProps {
   stories: StoryDetail[];
+  /** All stories, for looking up dependencies that a filter has hidden. Defaults to `stories`. */
+  lookup?: StoryDetail[];
 }
 
-export function StoriesTable({ stories }: StoriesTableProps) {
+/** One section per epic, so the epic is not repeated on every row. */
+export function StoriesTable({ stories, lookup = stories }: StoriesTableProps) {
+  const groups = useMemo(() => {
+    const byEpic = new Map<string, { title: string; stories: StoryDetail[] }>();
+    for (const story of stories) {
+      const group = byEpic.get(story.epicId) ?? {
+        title: story.epicTitle ?? `Epic ${story.epicId}`,
+        stories: [],
+      };
+      group.stories.push(story);
+      byEpic.set(story.epicId, group);
+    }
+    return [...byEpic.entries()];
+  }, [stories]);
+  // Across all epics: a dependency can sit in another epic than the story that needs it.
+  const storyByNumber = useMemo(() => {
+    const map = new Map<string, StoryDetail>();
+    for (const story of lookup) {
+      const number = storyNumber(story.id);
+      if (number) map.set(number, story);
+    }
+    return map;
+  }, [lookup]);
+
+  return (
+    <div className="space-y-8">
+      {groups.map(([epicId, group]) => (
+        <section key={epicId} className="space-y-3">
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-lg font-medium">{group.title}</h2>
+            <span className="text-sm text-muted-foreground">{group.stories.length} stories</span>
+          </div>
+          <StoriesGrid stories={group.stories} storyByNumber={storyByNumber} />
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function StoriesGrid({
+  stories,
+  storyByNumber,
+}: StoriesTableProps & { storyByNumber: Map<string, StoryDetail> }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const router = useRouter();
   const pathname = usePathname();
   const running = useRunningStoryIds();
-  const idByNumber = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const story of stories) {
-      const number = storyNumber(story.id);
-      if (number) map.set(number, story.id);
-    }
-    return map;
-  }, [stories]);
   const columns = useMemo(
-    () => getColumns(pathname, running, idByNumber),
-    [pathname, running, idByNumber],
+    () => getColumns(pathname, running, storyByNumber),
+    [pathname, running, storyByNumber],
   );
 
   const table = useReactTable({

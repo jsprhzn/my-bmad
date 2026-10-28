@@ -12,6 +12,7 @@ import {
   Eye,
   Map,
   BookOpen,
+  Bot,
   FileText,
   Shield,
   PlusIcon,
@@ -48,6 +49,7 @@ const projectTabs = [
   { label: "Overview", segment: "", icon: Eye },
   { label: "Epics", segment: "epics", icon: Map },
   { label: "Stories", segment: "stories", icon: BookOpen },
+  { label: "Agents", segment: "runs", icon: Bot },
   { label: "Library", segment: "docs", icon: FileText },
 ];
 
