@@ -233,8 +233,8 @@ function getColumns(
       enableSorting: false,
     },
     {
-      id: "waitingOn",
-      header: "Waiting on this",
+      id: "parallelWith",
+      header: "Can run now",
       cell: ({ row }) => (
         <NumberChips
           numbers={waitingOn.get(storyNumber(row.original.id) ?? "") ?? []}
