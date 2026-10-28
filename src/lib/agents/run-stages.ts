@@ -104,7 +104,8 @@ export function logTail(stream: string, lines: number): LogLine[] {
   for (const raw of stream.split(/\r?\n/)) {
     const at = /"_ts":"([^"]+)"\}\s*$/.exec(raw)?.[1] ?? null;
     for (const line of formatStreamLine(raw)) {
-      const text = line.trimEnd();
+      // A message can run to many paragraphs; the tail shows the first one only.
+      const text = (line.split(/\n\s*\n/)[0] ?? "").trimEnd();
       if (!text.trim() || /^→ /.test(text) || /^(\s|[-*]\s|\d+\.\s)/.test(text)) continue;
       out.push({ at, text });
     }

@@ -48,6 +48,14 @@ describe("logTail", () => {
     ]);
   });
 
+  it("shows only the first paragraph of a message", () => {
+    const long = JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "text", text: "Eerste alinea.\n\nTweede alinea met meer tekst." }] },
+    });
+    expect(logTail(long, 1)).toEqual([{ at: null, text: "Eerste alinea." }]);
+  });
+
   it("gives each headline the time its line was written", () => {
     const stamped = (value: string, at: string) =>
       JSON.stringify({
