@@ -147,7 +147,7 @@ describe("agent run scripts", () => {
     // The script exits 1 when it does not merge.
     expect(() => sh(script, "merge.sh")).toThrow();
 
-    expect(readFileSync(result, "utf8")).toContain("die de AI niet kon oplossen");
+    expect(readFileSync(result, "utf8")).toContain("that the AI could not resolve");
     expect(readFileSync(path.join(checkout, "file.txt"), "utf8")).toBe("main\n");
   });
 });
