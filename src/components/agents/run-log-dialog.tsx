@@ -55,7 +55,7 @@ export function RunLogDialog({
             {error}
           </p>
         ) : log === null ? (
-          <p className="text-sm text-muted-foreground">Laden…</p>
+          <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
           <RunLog log={log} emptyText="No output." />
         )}

@@ -25,7 +25,7 @@ interface DocumentatieViewProps {
 export function DocumentatieView({ owner, repo, indexPath, html }: DocumentatieViewProps) {
   const folder = indexPath.slice(0, indexPath.lastIndexOf("/") + 1);
   const frameRef = useRef<HTMLIFrameElement>(null);
-  // Pages opened from the index, so "Terug" can return to the one before.
+  // Pages opened from the index, so "Back" can return to the one before.
   const [history, setHistory] = useState<{ html: string; title: string }[]>([]);
   const [current, setCurrent] = useState({ html, title: "Documentation" });
   const [loading, setLoading] = useState(false);
@@ -79,10 +79,10 @@ export function DocumentatieView({ owner, repo, indexPath, html }: DocumentatieV
         {history.length > 0 && (
           <Button variant="ghost" size="sm" onClick={back}>
             <ArrowLeft className="size-4" aria-hidden="true" />
-            Terug
+            Back
           </Button>
         )}
-        {loading && <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label="Laden" />}
+        {loading && <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label="Loading" />}
         {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="ml-auto">
           <Tooltip>

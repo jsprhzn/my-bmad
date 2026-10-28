@@ -245,18 +245,18 @@ export function mergeScript(p: {
     `FINISH_PROMPT=${shQuote(p.finishPromptFile ?? "")}`,
     // Shared by every worktree of the checkout, so only one run merges at a time.
     'LOCK="$(git -C "$CHECKOUT" rev-parse --path-format=absolute --git-common-dir)/agent-merge.lock"',
-    'fail() { echo "Niet samengevoegd: $1" > "$RESULT"; exit 1; }',
+    'fail() { echo "Not merged: $1" > "$RESULT"; exit 1; }',
     // A build that left changes behind gets an agent to finish and commit them, twice at most.
     'for i in 1 2; do',
     '  [ -n "$(git -C "$WORKTREE" status --porcelain)" ] || break',
     '  [ -n "$FINISH_PROMPT" ] || break',
     '  (cd "$WORKTREE" && eval "$RESOLVE") < "$FINISH_PROMPT" >> "$CONFLICT_LOG" 2>&1',
     'done',
-    '[ -z "$(git -C "$WORKTREE" status --porcelain)" ] || fail "de run heeft ongecommitte wijzigingen achtergelaten, die ook de agent niet heeft vastgelegd."',
-    'TARGET=$(git -C "$CHECKOUT" symbolic-ref --quiet --short HEAD) || fail "de hoofdwerkboom staat niet op een branch."',
+    '[ -z "$(git -C "$WORKTREE" status --porcelain)" ] || fail "the run left uncommitted changes that the agent did not commit either."',
+    'TARGET=$(git -C "$CHECKOUT" symbolic-ref --quiet --short HEAD) || fail "the main checkout is not on a branch."',
     "until mkdir \"$LOCK\" 2>/dev/null; do sleep 2; done",
     'trap \'rmdir "$LOCK"\' EXIT',
-    '[ "$(git -C "$WORKTREE" rev-list --count "$TARGET..$BRANCH")" -gt 0 ] || fail "de run heeft geen commits opgeleverd."',
+    '[ "$(git -C "$WORKTREE" rev-list --count "$TARGET..$BRANCH")" -gt 0 ] || fail "the run produced no commits."',
     // Keep sprint-status in step with the outcome: blocked when the build halted,
     // done when the spec is done, otherwise review. Committed on the story branch.
     'SPRINT="_bmad-output/implementation-artifacts/sprint-status.yaml"',
@@ -284,8 +284,8 @@ export function mergeScript(p: {
     '  ! rebasing',
     '}',
     'rebase_onto_target() {',
-    '  git -C "$WORKTREE" rebase -q "$TARGET" || resolve_conflicts || { git -C "$WORKTREE" rebase --abort 2>/dev/null; fail "conflict met $TARGET die de AI niet kon oplossen."; }',
-    '  git -C "$WORKTREE" merge-base --is-ancestor "$TARGET" HEAD || fail "de rebase op $TARGET is niet gelukt."',
+    '  git -C "$WORKTREE" rebase -q "$TARGET" || resolve_conflicts || { git -C "$WORKTREE" rebase --abort 2>/dev/null; fail "conflict with $TARGET that the AI could not resolve."; }',
+    '  git -C "$WORKTREE" merge-base --is-ancestor "$TARGET" HEAD || fail "the rebase onto $TARGET failed."',
     '}',
     // The checkout can move on while the story is rebased, so a fast-forward
     // that fails is retried on the new tip. The AI resolves any new conflicts.
@@ -293,7 +293,7 @@ export function mergeScript(p: {
     '  rebase_onto_target',
     '  git -C "$CHECKOUT" merge --ff-only -q "$BRANCH" && { merged=1; break; }',
     'done',
-    '[ "${merged:-}" = 1 ] || fail "$TARGET kon niet vooruit worden gezet (zie de hoofdwerkboom)."',
+    '[ "${merged:-}" = 1 ] || fail "$TARGET could not be fast-forwarded (see the main checkout)."',
     'git -C "$CHECKOUT" worktree remove --force "$WORKTREE" && git -C "$CHECKOUT" branch -q -d "$BRANCH"',
     'echo merged > "$RESULT"',
     "",
@@ -383,7 +383,7 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
   }
   const resumeSessionId =
     input.resumeSessionId ?? (continuing ? readSessionId(await readText(runFile(id, "jsonl"))) : null) ?? undefined;
-  if (continuing && !resumeSessionId) throw new Error("Deze run heeft geen sessie om door te gaan.");
+  if (continuing && !resumeSessionId) throw new Error("This run has no session to continue.");
   const promptFile = runFile(id, "prompt.txt");
   await writeFile(promptFile, `${input.prompt}\n`, "utf8");
   // A continued run appends to its log instead of replacing it.
@@ -421,7 +421,7 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
           ...(reuse || continuing
             ? []
             : [
-                `git -C ${shQuote(input.localPath)} worktree add -q -b ${shQuote(branch)} ${shQuote(worktree)} HEAD || { echo ${shQuote("Niet gestart: geen werkboom voor de run.")} > ${shQuote(mergeResult)}; echo 1 > ${shQuote(runFile(id, "exit"))}; exit 1; }`,
+                `git -C ${shQuote(input.localPath)} worktree add -q -b ${shQuote(branch)} ${shQuote(worktree)} HEAD || { echo ${shQuote("Not started: no worktree for the run.")} > ${shQuote(mergeResult)}; echo 1 > ${shQuote(runFile(id, "exit"))}; exit 1; }`,
               ]),
           `cd ${shQuote(worktree)}`,
         ]
