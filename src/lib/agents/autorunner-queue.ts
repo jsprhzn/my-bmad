@@ -133,6 +133,8 @@ export interface WaitingStory {
   attempts: number;
   /** For a review: the build run whose held branch it works on. */
   buildRunId?: string;
+  /** The run that hit the limit: the retry continues this run instead of starting a new one. */
+  runId?: string;
 }
 
 export interface AutorunnerState {

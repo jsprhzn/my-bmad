@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import type { ModelTier } from "@/lib/bmad/types";
@@ -351,6 +351,11 @@ export interface StartRunInput {
   hold?: boolean;
   /** Work on this held build's branch and worktree, instead of a new branch. */
   reuseBuild?: HeldBranch;
+  /**
+   * Continue an earlier run in its own record: same id, its log appended, its Claude session resumed,
+   * its worktree and branch kept. A retry uses this instead of a new run.
+   */
+  continueRunId?: string;
 }
 
 /** A build's branch kept for its review. */
@@ -361,21 +366,41 @@ export interface HeldBranch {
   baseBranch: string | null;
 }
 
+/** The stored record of a run, for continuing it. */
+async function readRecord(id: string): Promise<AgentRun> {
+  if (!RUN_ID.test(id) || !existsSync(runFile(id, "json"))) throw new Error("Run not found");
+  return JSON.parse(await readFile(runFile(id, "json"), "utf8")) as AgentRun;
+}
+
 export async function startRun(input: StartRunInput): Promise<AgentRun> {
   await mkdir(runsDir(), { recursive: true });
-  const id = `${Date.now()}-${randomBytes(4).toString("hex")}`;
+  const previous = input.continueRunId ? await readRecord(input.continueRunId) : null;
+  const continuing = previous !== null;
+  const id = previous?.id ?? `${Date.now()}-${randomBytes(4).toString("hex")}`;
+  if (continuing) {
+    // The old outcome must not count for the new attempt: refreshRun reads these files.
+    for (const ext of ["exit", "merge.txt", "claude.rc"]) await rm(runFile(id, ext), { force: true });
+  }
+  const resumeSessionId =
+    input.resumeSessionId ?? (continuing ? readSessionId(await readText(runFile(id, "jsonl"))) : null) ?? undefined;
+  if (continuing && !resumeSessionId) throw new Error("Deze run heeft geen sessie om door te gaan.");
   const promptFile = runFile(id, "prompt.txt");
   await writeFile(promptFile, `${input.prompt}\n`, "utf8");
+  // A continued run appends to its log instead of replacing it.
+  const append = continuing ? ">>" : ">";
 
   const template = process.env.AGENT_COMMAND_TEMPLATE || DEFAULT_AGENT_COMMAND;
-  const resume = input.resumeSessionId ? ` --resume ${shQuote(input.resumeSessionId)}` : "";
+  const resume = resumeSessionId ? ` --resume ${shQuote(resumeSessionId)}` : "";
   const agentCommand = template
     .replaceAll("{model}", input.model)
     .replaceAll("{permission_mode}", input.permissionMode) + resume;
   // Builds, plans and reviews each work on a branch of their own, in a worktree,
   // so the checkout stays clean. A review of a held build works on that build's
-  // branch. Resumed replies keep working where they ran.
-  const isolated = !input.resumeSessionId && existsSync(path.join(input.localPath, ".git"));
+  // branch. Resumed replies keep working where they ran; a continued run keeps the
+  // branch and worktree it had.
+  const isolated = continuing
+    ? previous.branch != null
+    : !resumeSessionId && existsSync(path.join(input.localPath, ".git"));
   const reuse = input.reuseBuild ?? null;
   const worktree = reuse
     ? path.join(runsDir(), `${reuse.runId}.worktree`)
@@ -392,8 +417,8 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
     ...(isolated
       ? [
           // A build sets its story in-progress first, so the branch is cut from a checkout that says so.
-          ...(input.kind === "dev" ? [`sh ${shQuote(runFile(id, "start.sh"))}`] : []),
-          ...(reuse
+          ...(input.kind === "dev" && !continuing ? [`sh ${shQuote(runFile(id, "start.sh"))}`] : []),
+          ...(reuse || continuing
             ? []
             : [
                 `git -C ${shQuote(input.localPath)} worktree add -q -b ${shQuote(branch)} ${shQuote(worktree)} HEAD || { echo ${shQuote("Niet gestart: geen werkboom voor de run.")} > ${shQuote(mergeResult)}; echo 1 > ${shQuote(runFile(id, "exit"))}; exit 1; }`,
@@ -403,7 +428,7 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
       : []),
     // Braces so a compound command template gets the redirections as a whole. Claude's exit code goes to its own
     // file, since the pipe to the stamp reports the stamp's exit code instead.
-    `{ ${agentCommand}; echo $? > ${shQuote(runFile(id, "claude.rc"))}; } < ${shQuote(promptFile)} 2> ${shQuote(runFile(id, "stderr.log"))} | perl -e ${shQuote(STAMP_STREAM)} > ${shQuote(runFile(id, "jsonl"))}`,
+    `{ ${agentCommand}; echo $? > ${shQuote(runFile(id, "claude.rc"))}; } < ${shQuote(promptFile)} 2${append} ${shQuote(runFile(id, "stderr.log"))} | perl -e ${shQuote(STAMP_STREAM)} ${append} ${shQuote(runFile(id, "jsonl"))}`,
     isolated
       ? [
           `rc=$(cat ${shQuote(runFile(id, "claude.rc"))} 2>/dev/null || echo 1)`,
@@ -455,7 +480,7 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
   });
   child.unref();
 
-  const run: AgentRun = {
+  const fresh: AgentRun = {
     id,
     repoKey: input.repoKey,
     userId: input.userId,
@@ -479,6 +504,24 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
     baseBranch: isolated ? (reuse?.baseBranch ?? (await currentBranch(input.localPath))) : null,
     held: hold || undefined,
   };
+  // A continued run keeps its record: who started it, its parent and its branch. Only the attempt is new.
+  const run: AgentRun = previous
+    ? {
+        ...previous,
+        status: "running",
+        pid: child.pid ?? null,
+        startedAt: fresh.startedAt,
+        endedAt: null,
+        exitCode: null,
+        costUsd: null,
+        inputTokens: null,
+        outputTokens: null,
+        numTurns: null,
+        error: null,
+        paused: false,
+        held: fresh.held,
+      }
+    : fresh;
   await saveRun(run);
   return run;
 }
