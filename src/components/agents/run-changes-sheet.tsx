@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ArrowLeft, FileText, GitBranch, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, ExternalLink, FileText, GitBranch, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { ChangedFile, RunChanges } from "@/lib/agents/run-changes";
@@ -27,6 +28,25 @@ const STATUS_LETTER: Record<ChangedFile["status"], { letter: string; className: 
 type Loaded = RunChanges & { branch: string | null; baseBranch: string | null; running: boolean };
 
 /**
+ * Open the already-rendered markdown in a new tab as a standalone HTML page. The app's stylesheets are copied
+ * over (absolute URLs, so they still load from a blob page) and the theme class is kept.
+ */
+function openRenderedInBrowser(node: HTMLElement, title: string) {
+  const styles = Array.from(document.querySelectorAll<HTMLElement>('style, link[rel="stylesheet"]'))
+    .map((el) => (el instanceof HTMLLinkElement ? `<link rel="stylesheet" href="${el.href}">` : `<style>${el.textContent}</style>`))
+    .join("");
+  const page =
+    `<!doctype html><html lang="nl" class="${document.documentElement.className}"><head>` +
+    `<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">` +
+    `<title>${title.replace(/[<>&]/g, "")}</title>${styles}</head>` +
+    `<body><main style="max-width:880px;margin:0 auto;padding:24px">${node.innerHTML}</main></body></html>`;
+  const url = URL.createObjectURL(new Blob([page], { type: "text/html" }));
+  window.open(url, "_blank", "noopener");
+  // Give the new tab time to load before the URL is released.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/**
  * A new markdown file shows as rendered text, with the diff one click away. Other files, and markdown that
  * the diff only partly shows, show the diff.
  */
@@ -41,19 +61,42 @@ function FileDiffView({
   preview: boolean;
   onPreviewChange: (preview: boolean) => void;
 }) {
+  const previewRef = useRef<HTMLDivElement>(null);
   const content = path.endsWith(".md") ? addedFileContent(diff) : null;
   if (content === null) return <DiffView diff={diff} />;
   return (
     <div className="space-y-3">
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
         <Button variant={preview ? "secondary" : "ghost"} size="sm" onClick={() => onPreviewChange(true)}>
           Voorbeeld
         </Button>
         <Button variant={preview ? "ghost" : "secondary"} size="sm" onClick={() => onPreviewChange(false)}>
           Diff
         </Button>
+        {preview && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="ml-auto h-8 w-8"
+                aria-label="Open in browser"
+                onClick={() => previewRef.current && openRenderedInBrowser(previewRef.current, path)}
+              >
+                <ExternalLink className="size-4" aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Open in browser</TooltipContent>
+          </Tooltip>
+        )}
       </div>
-      {preview ? <MarkdownRenderer content={content} filePath={path} /> : <DiffView diff={diff} />}
+      {preview ? (
+        <div ref={previewRef}>
+          <MarkdownRenderer content={content} filePath={path} />
+        </div>
+      ) : (
+        <DiffView diff={diff} />
+      )}
     </div>
   );
 }
@@ -279,11 +322,11 @@ export function RunChangesSheet({
               ) : (
                 <ul className="divide-y rounded-md border">
                   {files.map((file) => (
-                    <li key={file.path}>
+                    <li key={file.path} className="flex items-center">
                       <button
                         type="button"
                         onClick={() => void openFile(file.path)}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/50"
+                        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left hover:bg-muted/50"
                       >
                         <span className={cn("w-3 shrink-0 font-mono text-xs font-medium", STATUS_LETTER[file.status].className)}>
                           {STATUS_LETTER[file.status].letter}
@@ -293,6 +336,22 @@ export function RunChangesSheet({
                           {file.additions === null ? "binair" : `+${file.additions} −${file.deletions}`}
                         </span>
                       </button>
+                      {file.path.endsWith(".md") && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="mr-1 h-7 w-7 shrink-0"
+                              aria-label="Open as HTML"
+                              onClick={() => void openFile(file.path)}
+                            >
+                              <ExternalLink className="size-3.5" aria-hidden="true" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Open as HTML</TooltipContent>
+                        </Tooltip>
+                      )}
                     </li>
                   ))}
                 </ul>
