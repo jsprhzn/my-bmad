@@ -52,26 +52,30 @@ function formatDuration(ms: number): string {
   return `${Math.floor(minutes / 60)} u ${String(minutes % 60).padStart(2, "0")} min`;
 }
 
-/** Tokens as "842.110" or "3,2 mln". */
-function formatTokens(count: number): string {
-  if (count >= 1_000_000) {
-    return `${(count / 1_000_000).toLocaleString("nl-NL", { maximumFractionDigits: 1 })} mln tokens`;
-  }
-  return `${count.toLocaleString("nl-NL")} tokens`;
-}
+const STATUS_LABELS: Record<AutorunnerView["status"], string> = {
+  running: "draait",
+  completed: "klaar",
+  stopped: "gestopt",
+  failed: "gestopt door een fout",
+};
 
-/** Start, end or running time, duration, tokens and cost of one queue. */
-function QueueTotals({ view, now }: { view: AutorunnerView; now: number }) {
-  const end = view.endedAt ? Date.parse(view.endedAt) : now;
-  const duration = end - Date.parse(view.startedAt);
+/** The finished queues of the project: when each started and ended, how long it ran, and what it cost. */
+function RunnerHistory({ views }: { views: AutorunnerView[] }) {
   return (
-    <p className="text-muted-foreground">
-      Gestart {formatTime(view.startedAt)}
-      {view.endedAt ? ` · geëindigd ${formatTime(view.endedAt)}` : ""} · {view.endedAt ? "duur" : "loopt al"}{" "}
-      {formatDuration(duration)} · {formatTokens(view.inputTokens + view.outputTokens)}
-      {` (${formatTokens(view.inputTokens)} in, ${formatTokens(view.outputTokens)} uit)`} · $
-      {view.costUsd.toFixed(2)} · {view.runCount} runs
-    </p>
+    <div className="space-y-1 text-sm">
+      <p className="font-medium">Eerdere autorunners</p>
+      <ul className="space-y-1 text-muted-foreground">
+        {views.map((view) => {
+          const duration = Date.parse(view.endedAt ?? view.startedAt) - Date.parse(view.startedAt);
+          return (
+            <li key={view.id}>
+              {formatTime(view.startedAt)} → {view.endedAt ? formatTime(view.endedAt) : "?"} · {formatDuration(duration)} · $
+              {view.costUsd.toFixed(2)} · {view.runCount} runs · {STATUS_LABELS[view.status]}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -87,8 +91,6 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
   const [review, setReview] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Re-rendered with each poll, so the running time stays current.
-  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     let alive = true;
@@ -96,7 +98,6 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
       const result = await listAutorunnerViews({ owner, name: repo });
       if (alive && result.success) {
         setViews(result.data);
-        setNow(Date.now());
       }
     };
     void poll();
@@ -113,7 +114,7 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
   };
 
   const current = views.find((v) => v.status === "running") ?? null;
-  const last = views.find((v) => v.status !== "running") ?? null;
+  const finished = views.filter((v) => v.status !== "running").slice(0, 4);
 
   const start = async () => {
     setPending(true);
@@ -245,17 +246,9 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
             </DialogContent>
           </Dialog>
 
-          {last && (
-            <div className="space-y-0.5 text-sm text-muted-foreground">
-              <p>
-                Laatste autorunner: {last.status === "failed" ? "gestopt door een fout" : last.status === "completed" ? "klaar" : "gestopt"}
-                {last.note && ` · ${last.note}`}
-              </p>
-              <QueueTotals view={last} now={now} />
-            </div>
-          )}
         </div>
       )}
+      {finished.length > 0 && <RunnerHistory views={finished} />}
       {!current && error && (
         <p className="text-sm text-destructive" role="alert">
           {error}
