@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { groupOf, parseChanges, parseUnifiedDiff } from "../run-changes";
+import { groupOf, parseChanges } from "../run-changes";
+import { parseUnifiedDiff } from "../unified-diff";
 
 describe("parseUnifiedDiff", () => {
   it("numbers the lines of each hunk and drops the file header", () => {
