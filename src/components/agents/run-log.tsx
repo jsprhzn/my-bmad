@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 /** The agent's own message: its first line, with the lines under it folded. */
 export interface MessageBlock {
@@ -53,6 +55,28 @@ export function splitLog(log: string): LogBlock[] {
 
 const MARKDOWN_CLASS =
   "break-words [&_p]:m-0 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_strong]:font-semibold [&_code]:font-mono [&_code]:text-[0.9em]";
+
+function FoldButton({
+  open,
+  onToggle,
+  label,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+    >
+      {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+      {open ? "Hide" : label}
+    </button>
+  );
+}
 
 /** What a message says, so the log can mark it: the answer you sent, a failure, a success, or agent status. */
 type Tone = "agent" | "user" | "error" | "success" | "status";
@@ -148,8 +172,10 @@ function MessageView({
   chosen?: string;
   onChoose?: (answer: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const tone = toneOf(block.summary);
   const options = optionsOf(block.details);
+  const detailLines = block.details ? block.details.split("\n").length : 0;
 
   return (
     <li className={`border-l-2 py-2 pl-3 ${TONE_CLASS[tone]}`}>
@@ -174,14 +200,53 @@ function MessageView({
                 />
               ))}
             </div>
-          ) : null}
+          ) : (
+            detailLines > 0 && (
+              <div className="mt-1">
+                <FoldButton
+                  open={open}
+                  onToggle={() => setOpen((value) => !value)}
+                  label={`Show ${detailLines} more ${detailLines === 1 ? "line" : "lines"}`}
+                />
+                {open && (
+                  <div className={`${MARKDOWN_CLASS} mt-1 pl-4 text-muted-foreground`}>
+                    <ReactMarkdown>{block.details}</ReactMarkdown>
+                  </div>
+                )}
+              </div>
+            )
+          )}
         </div>
       </div>
     </li>
   );
 }
 
-/** A run's log: only the agent's headline messages; tool calls and details are left out. */
+function ToolsView({ block }: { block: ToolBlock }) {
+  const [open, setOpen] = useState(false);
+  const count = block.lines.length;
+
+  return (
+    <li className="border-l-2 border-transparent py-1 pl-3">
+      <FoldButton
+        open={open}
+        onToggle={() => setOpen((value) => !value)}
+        label={`${count} ${count === 1 ? "tool call" : "tool calls"}`}
+      />
+      {open && (
+        <ul className="mt-1 space-y-0.5 border-l border-border/60 pl-3 text-muted-foreground">
+          {block.lines.map((line, index) => (
+            <li key={index} className="break-words">
+              {line.replace(TOOL_CALL, "")}
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+/** A run's log: the agent's messages, with tool calls in folded panes. */
 export function RunLog({
   log,
   emptyText,
@@ -204,7 +269,7 @@ export function RunLog({
   return (
     <ul className="divide-y divide-border/40 font-mono text-xs leading-relaxed">
       {blocks.map((block, index) => {
-        if (block.kind !== "message") return null;
+        if (block.kind !== "message") return <ToolsView key={index} block={block} />;
         // The first answer after these options is the one that picked from them.
         const answer = answers.find((at) => at > index);
         const picked = answer === undefined ? null : blocks[answer];
