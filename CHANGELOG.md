@@ -34,5 +34,5 @@ Initial public release.
 
 ---
 
-[Unreleased]: https://github.com/DevHDI/my-bmad/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/DevHDI/my-bmad/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Huzen-Software/my-bmad/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Huzen-Software/my-bmad/releases/tag/v0.1.0
