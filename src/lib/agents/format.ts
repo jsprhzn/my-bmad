@@ -15,3 +15,4 @@ export function formatDuration(ms: number): string {
   if (minutes < 60) return `${minutes} min`;
   return `${Math.floor(minutes / 60)} u ${String(minutes % 60).padStart(2, "0")} min`;
 }
+

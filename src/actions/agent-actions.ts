@@ -33,6 +33,7 @@ import {
   stopRun,
   type AgentRun,
 } from "@/lib/agents/run-store";
+import { readQuota, type Quota } from "@/lib/agents/quota";
 import {
   autorunnerFile,
   listAutorunners,
@@ -540,6 +541,25 @@ export async function listAutorunnerViews(
     const states = await listAutorunners(access.data.repoKey, access.data.userId);
     const runs = await listRuns({ repoKey: access.data.repoKey, userId: access.data.userId });
     return { success: true, data: states.slice(0, 5).map((state) => viewOf(state, runs)) };
+  } catch (error) {
+    return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
+  }
+}
+
+/** The plan limit of the project's Claude account: the session and the week, as Claude Code reports them. */
+export async function getAgentUsage(
+  input: z.infer<typeof repoSchema>,
+): Promise<ActionResult<Quota | null>> {
+  const parsed = repoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
+  }
+  const access = await requireAgentProject(parsed.data.owner, parsed.data.name);
+  if (!access.success) return access;
+  try {
+    const repo = await getAuthenticatedRepoConfig(access.data.userId, parsed.data.owner, parsed.data.name);
+    const account = findClaudeAccount(repo?.agentAccount ?? undefined);
+    return { success: true, data: await readQuota(account?.configDir) };
   } catch (error) {
     return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
   }
