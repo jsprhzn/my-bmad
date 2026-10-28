@@ -131,9 +131,35 @@ export function AutorunnerStoryRow({
 
       <StageTrack stages={story.stages} paused={story.paused} />
 
-      <pre className="min-h-16 overflow-x-auto rounded-md bg-muted/50 p-2 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
-        {story.logTail.length > 0 ? story.logTail.join("\n") : "Nog geen uitvoer."}
-      </pre>
+      <div className="min-h-16 rounded-md bg-muted/50 p-2 font-mono text-xs leading-relaxed text-muted-foreground">
+        {story.logTail.length > 0 ? (
+          <ul className="space-y-1">
+            {story.logTail.map((line, index) => {
+              // The last line of a running story is the one in progress.
+              const active = story.running && index === story.logTail.length - 1;
+              return (
+                <li key={index} className="flex gap-2">
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "mt-1.5 size-1.5 shrink-0 rounded-full bg-success",
+                      active && "animate-pulse",
+                    )}
+                  />
+                  {line.at && (
+                    <time dateTime={line.at} className="shrink-0 tabular-nums">
+                      {formatTime(line.at)}
+                    </time>
+                  )}
+                  <span className="min-w-0 break-words whitespace-pre-wrap">{line.text}</span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          "Nog geen uitvoer."
+        )}
+      </div>
 
       {error && (
         <p className="text-sm text-destructive" role="alert">
