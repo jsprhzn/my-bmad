@@ -6,6 +6,7 @@ import { LayoutList, Columns3, Eye, EyeOff } from "lucide-react";
 import { StoryFilters, type Filter } from "./story-filters";
 import { StoriesTable } from "./stories-table";
 import { KanbanBoard } from "./kanban-board";
+import { SplitStoryGroups } from "./split-story-groups";
 import { StaggeredList, StaggeredItem } from "@/components/shared/staggered-list";
 import type { StoryDetail, Epic } from "@/lib/bmad/types";
 
@@ -104,6 +105,10 @@ export function StoriesView({ stories, epics }: StoriesViewProps) {
             </Button>
           </div>
         </div>
+      </StaggeredItem>
+
+      <StaggeredItem>
+        <SplitStoryGroups stories={stories} />
       </StaggeredItem>
 
       <StaggeredItem>
