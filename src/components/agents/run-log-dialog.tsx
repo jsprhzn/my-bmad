@@ -45,7 +45,7 @@ export function RunLogDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+      <DialogContent className="max-h-[85vh] max-w-[95vw] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>Volledige log</DialogTitle>
           <DialogDescription className="truncate">{title}</DialogDescription>
