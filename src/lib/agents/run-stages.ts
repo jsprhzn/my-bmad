@@ -77,7 +77,11 @@ export function reachedStages(stream: string): StageId[] {
         if (pattern.test(file)) reach(stage);
       }
       if (block.name === "Skill" && String(input.skill ?? "").includes("review")) reach("review");
-      if ((block.name === "Agent" || block.name === "Task") && block.id) openSubagents.add(block.id);
+      if (block.name === "Agent" || block.name === "Task") {
+        // The build skill hands the implementation to a subagent after its plan, so a subagent after the plan is the build.
+        if (block.id) openSubagents.add(block.id);
+        if (reached.includes("plan")) reach("build");
+      }
       const command = typeof input.command === "string" ? input.command : "";
       if (reached.includes("build") && openSubagents.size === 0 && TEST_COMMAND.test(command)) reach("test");
     }
