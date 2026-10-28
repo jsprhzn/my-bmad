@@ -90,7 +90,7 @@ export async function runAutorunner(file: string): Promise<void> {
           // The build's branch is kept: its review works on it and merges it, which sets the sprint status.
           const held = heldBranch(run);
           if (!held) {
-            failure = `${story.key}: de build heeft geen branch om te reviewen.`;
+            failure = `${story.key}: the build has no branch to review.`;
             continue;
           }
           if (await buildBlocked(run, story)) {
@@ -172,7 +172,7 @@ export async function runAutorunner(file: string): Promise<void> {
         // A review retry goes on the held build's branch; without it there is nothing to review.
         const held = retry.phase === "review" && retry.buildRunId ? heldBranch(runById.get(retry.buildRunId)) : null;
         if (retry.phase === "review" && retry.buildRunId && !held) {
-          failure = `${retry.key}: de branch van de build is weg; de review kan niet opnieuw starten.`;
+          failure = `${retry.key}: the build's branch is gone; the review cannot start again.`;
           continue;
         }
         const skill = retry.phase === "build" ? buildSkill : retry.phase === "split" ? splitSkill : reviewSkill;
@@ -244,10 +244,10 @@ export async function runAutorunner(file: string): Promise<void> {
         note: failed
           ? failNote
           : state.stopRequested
-            ? "Gestopt."
+            ? "Stopped."
             : openLeft.length === 0
-              ? "Alle stories zijn af."
-              : `${openLeft.length} stories wachten op afhankelijkheden die nu niet klaar zijn.`,
+              ? "All stories are done."
+              : `${openLeft.length} stories are waiting on dependencies that are not done yet.`,
         active,
         waiting: pending,
         done: state.done,
@@ -267,13 +267,13 @@ export async function runAutorunner(file: string): Promise<void> {
       note:
         failNote ??
         (throttled
-          ? `Token-budget vol (${Math.round((load ?? 1) * 100)}%); wacht tot er weer ruimte is.`
+          ? `Token budget full (${Math.round((load ?? 1) * 100)}%); waiting until there is room again.`
           : null) ??
         (limited && active.length >= allowance && openLeft.length > active.length
-          ? `Tokens bijna op (${Math.round((load ?? 0) * 100)}%): ${active.length} van maximaal ${allowance} runs draaien, dus er start nu geen nieuwe.`
+          ? `Tokens nearly used up (${Math.round((load ?? 0) * 100)}%): ${active.length} of at most ${allowance} runs running, so no new one starts now.`
           : null) ??
         (pending.length > 0 && active.length === 0
-          ? `Wacht op de token-limiet; verder om ${new Date(nextWait).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}.`
+          ? `Waiting for the token limit; continuing at ${new Date(nextWait).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}.`
           : null),
       driverPid: process.pid,
     });

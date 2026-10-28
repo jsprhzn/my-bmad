@@ -34,15 +34,15 @@ import { AutorunnerStoryRow } from "./autorunner-story";
 const POLL_MS = 10000;
 
 const MODE_LABELS: Record<AutorunnerView["mode"], string> = {
-  serial: "Een voor een",
+  serial: "One at a time",
   parallel: "Parallel (max 3)",
 };
 
 const STATUS_LABELS: Record<AutorunnerView["status"], string> = {
-  running: "draait",
-  completed: "klaar",
-  stopped: "gestopt",
-  failed: "gestopt door een fout",
+  running: "running",
+  completed: "done",
+  stopped: "stopped",
+  failed: "stopped by an error",
 };
 
 /** The finished queues of the project: when each started and ended, how long it ran, and what it cost. */
@@ -150,11 +150,11 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
           <div className="flex flex-wrap items-center gap-3">
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
             <div className="min-w-0 flex-1 space-y-0.5">
-              <p className="font-medium">Autorunner draait · {MODE_LABELS[current.mode]}</p>
+              <p className="font-medium">Autorunner running · {MODE_LABELS[current.mode]}</p>
               <p className="text-muted-foreground">
-                {current.done.length} klaar · {current.active.length} bezig · {current.runCount} runs uitgevoerd
-                {current.waiting.length > 0 && " · wacht op token-limiet"}
-                {!current.driverAlive && " · de runner lijkt te zijn onderbroken"}
+                {current.done.length} done · {current.active.length} active · {current.runCount} runs run
+                {current.waiting.length > 0 && " · waiting for token limit"}
+                {!current.driverAlive && " · the runner seems to have been interrupted"}
               </p>
               {current.note && <p className="text-muted-foreground">{current.note}</p>}
             </div>
@@ -165,7 +165,7 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
                   size="sm"
                   onClick={() => void pauseAll(current.id, !allPaused(current))}
                 >
-                  {allPaused(current) ? "Hervat alles" : "Pauzeer alles"}
+                  {allPaused(current) ? "Resume all" : "Pause all"}
                 </Button>
               )}
               <Button
@@ -174,7 +174,7 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
                 onClick={() => void stop(current.id, false)}
                 disabled={current.stopRequested}
               >
-                {current.stopRequested ? "Stoppen…" : "Stop na huidige"}
+                {current.stopRequested ? "Stopping…" : "Stop after current"}
               </Button>
               <Button
                 variant="destructive"
@@ -182,7 +182,7 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
                 onClick={() => void stop(current.id, true)}
                 disabled={current.stopRequested && current.active.length === 0}
               >
-                Stop nu
+                Stop now
               </Button>
             </div>
           </div>
@@ -202,16 +202,16 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
             <DialogTrigger asChild>
               <Button variant="outline">
                 <Bot className="size-4" />
-                Autorunner starten…
+                Start autorunner…
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Autorunner starten</DialogTitle>
+                <DialogTitle>Start autorunner</DialogTitle>
                 <DialogDescription>
-                  De runner pakt zelf de volgende story uit de backlog waarvan de afhankelijkheden klaar
-                  zijn, en werkt die af in auto mode. Bij een fout stopt hij; bij een token-limiet wacht
-                  hij tot die weer beschikbaar is en probeert het opnieuw.
+                  The runner picks the next story from the backlog whose dependencies are done
+                  and works it through in auto mode. On an error it stops; on a token limit it waits
+                  until that is available again and then tries again.
                 </DialogDescription>
               </DialogHeader>
 
@@ -223,7 +223,7 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
                     onValueChange={(value) => setMode(value as AutorunnerView["mode"])}
                     disabled={pending}
                   >
-                    <SelectTrigger className="w-56" aria-label="Volgorde van de autorunner">
+                    <SelectTrigger className="w-56" aria-label="Autorunner order">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -244,9 +244,9 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
                     disabled={pending}
                   />
                   <span>
-                    <span className="font-medium">Review na elke build</span>
+                    <span className="font-medium">Review after each build</span>
                     <span className="block text-muted-foreground">
-                      Een review-run die fouten zelf oplost. Kost extra tijd en tokens.
+                      A review run that fixes its own errors. Costs extra time and tokens.
                     </span>
                   </span>
                 </label>
@@ -259,9 +259,9 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
                     disabled={pending}
                   />
                   <span>
-                    <span className="font-medium">Computer wakker houden</span>
+                    <span className="font-medium">Keep computer awake</span>
                     <span className="block text-muted-foreground">
-                      Voorkomt dat de Mac in slaap gaat zolang de autorunner draait. Een dichtgeklapte laptop slaapt nog steeds.
+                      Keeps the Mac from sleeping while the autorunner runs. A closed laptop still sleeps.
                     </span>
                   </span>
                 </label>
@@ -274,9 +274,9 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
                     disabled={pending}
                   />
                   <span>
-                    <span className="font-medium">Grote stories opsplitsen</span>
+                    <span className="font-medium">Split large stories</span>
                     <span className="block text-muted-foreground">
-                      Splitst L/XL-stories in subtasks voordat ze gebouwd worden. Kost een extra splitsingsrun; kleinere stories kunnen per run minder tokens gebruiken.
+                      Splits L/XL stories into subtasks before they are built. Costs one extra split run; smaller stories can use fewer tokens per run.
                     </span>
                   </span>
                 </label>
@@ -290,11 +290,11 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
 
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
-                  Annuleren
+                  Cancel
                 </Button>
                 <Button onClick={() => void start()} disabled={pending}>
                   {pending && <Loader2 className="animate-spin" />}
-                  Starten
+                  Start
                 </Button>
               </DialogFooter>
             </DialogContent>

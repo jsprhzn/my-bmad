@@ -17,7 +17,7 @@ const POLL_MS = 10000;
 
 type Filter = "all" | ChangedFile["group"];
 
-const FILTER_LABELS: Record<Filter, string> = { all: "Alles", code: "Code", specs: "Specs" };
+const FILTER_LABELS: Record<Filter, string> = { all: "All", code: "Code", specs: "Specs" };
 
 const STATUS_LETTER: Record<ChangedFile["status"], { letter: string; className: string }> = {
   added: { letter: "A", className: "text-success-foreground" },
@@ -68,7 +68,7 @@ function FileDiffView({
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <Button variant={preview ? "secondary" : "ghost"} size="sm" onClick={() => onPreviewChange(true)}>
-          Voorbeeld
+          Preview
         </Button>
         <Button variant={preview ? "ghost" : "secondary"} size="sm" onClick={() => onPreviewChange(false)}>
           Diff
@@ -122,7 +122,7 @@ function DiffView({ diff }: { diff: string }) {
         const to = [...hunk.lines].reverse().find((line) => line.newNumber !== null)?.newNumber;
         const range =
           from == null || to == null
-            ? "verwijderd"
+            ? "deleted"
             : from === to
               ? `regel ${from}`
               : `regels ${from}–${to}`;
@@ -236,7 +236,7 @@ export function RunChangesSheet({
     const result = await getAgentRunFileDiff({ owner, name: repo, runId, path });
     setDiffLoading(false);
     if (result.success) {
-      setDiff(result.data ?? "Geen diff beschikbaar.");
+      setDiff(result.data ?? "No diff available.");
     } else {
       setDiff(result.error);
     }
@@ -282,19 +282,19 @@ export function RunChangesSheet({
           {artifact === null && !loaded && !error && (
             <p className="flex items-center gap-2 text-muted-foreground">
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              Wijzigingen laden…
+              Loading changes…
             </p>
           )}
 
           {artifact === null && loaded?.state === "no-branch" && (
             <p className="text-muted-foreground">
-              Deze run werkt in de hoofdwerkboom en heeft geen eigen branch. Er is dus geen aparte lijst van wijzigingen.
+              This run works in the main checkout and has no branch of its own, so there is no separate list of changes.
             </p>
           )}
 
           {artifact === null && loaded?.state === "merged" && (
             <p className="text-muted-foreground">
-              De branch is samengevoegd en opgeruimd. De wijzigingen staan nu in de basisbranch.
+              The branch has been merged and cleaned up. The changes are now in the base branch.
             </p>
           )}
 
@@ -318,7 +318,7 @@ export function RunChangesSheet({
               </div>
 
               {files.length === 0 ? (
-                <p className="text-muted-foreground">Nog geen wijzigingen op de branch.</p>
+                <p className="text-muted-foreground">No changes on the branch yet.</p>
               ) : (
                 <ul className="divide-y rounded-md border">
                   {files.map((file) => (
@@ -333,7 +333,7 @@ export function RunChangesSheet({
                         </span>
                         <span className="min-w-0 flex-1 truncate font-mono text-xs">{file.path}</span>
                         <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                          {file.additions === null ? "binair" : `+${file.additions} −${file.deletions}`}
+                          {file.additions === null ? "binary" : `+${file.additions} −${file.deletions}`}
                         </span>
                       </button>
                       {file.path.endsWith(".md") && (
@@ -383,13 +383,13 @@ export function RunChangesSheet({
             <>
               <Button variant="ghost" size="sm" onClick={() => setArtifact(null)}>
                 <ArrowLeft className="size-4" aria-hidden="true" />
-                Terug
+                Back
               </Button>
               <p className="font-mono text-xs break-all">{artifact.path}</p>
               {artifact.content === null ? (
                 <p className="flex items-center gap-2 text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                  Laden…
+                  Loading…
                 </p>
               ) : artifact.path.endsWith(".md") ? (
                 <MarkdownRenderer content={artifact.content} filePath={artifact.path} />
@@ -403,13 +403,13 @@ export function RunChangesSheet({
             <>
               <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>
                 <ArrowLeft className="size-4" aria-hidden="true" />
-                Terug naar bestanden
+                Back to files
               </Button>
               <p className="font-mono text-xs break-all">{selected}</p>
               {diffLoading ? (
                 <p className="flex items-center gap-2 text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                  Diff laden…
+                  Loading diff…
                 </p>
               ) : (
                 diff && <FileDiffView path={selected} diff={diff} preview={preview} onPreviewChange={setPreview} />

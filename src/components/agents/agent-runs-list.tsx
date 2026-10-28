@@ -166,7 +166,7 @@ export function AgentRunsList({ owner, repo }: { owner: string; repo: string }) 
                   </Link>
                   {run.kind === "dev" && (
                     <Button variant="outline" size="sm" onClick={() => setChangesRun(run)}>
-                      Wijzigingen
+                      Changes
                     </Button>
                   )}
                   {run.status === "running" && run.paused ? (
@@ -181,10 +181,10 @@ export function AgentRunsList({ owner, repo }: { owner: string; repo: string }) 
                         size="sm"
                         onClick={() => void control(run, run.paused ? "resume" : "pause")}
                         disabled={busy.has(run.id)}
-                        aria-label={run.paused ? "Hervat" : "Pauzeer"}
+                        aria-label={run.paused ? "Resume" : "Pause"}
                       >
                         {run.paused ? <Play className="size-4" /> : <Pause className="size-4" />}
-                        {run.paused ? "Hervat" : "Pauzeer"}
+                        {run.paused ? "Resume" : "Pause"}
                       </Button>
                       <Button
                         variant="outline"
