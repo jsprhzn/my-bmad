@@ -27,6 +27,8 @@ const KINDS_BY_STATUS: Record<StoryStatus, AgentRunKind[]> = {
   blocked: ["dev"],
   review: ["review"],
   done: ["review"],
+  // A split story is worked on through its subtasks, so the parent offers no action.
+  split: [],
 };
 
 export function runKindsFor(status: StoryStatus): AgentRunKind[] {

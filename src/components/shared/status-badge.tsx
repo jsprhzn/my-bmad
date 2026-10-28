@@ -27,6 +27,10 @@ const statusConfig: Record<string, { label: string; className: string }> = {
     label: "Backlog",
     className: "bg-muted text-muted-foreground border-border",
   },
+  split: {
+    label: "Split",
+    className: "bg-muted text-muted-foreground border-dashed border-border",
+  },
   "not-started": {
     label: "Not Started",
     className: "bg-muted text-muted-foreground border-border",
