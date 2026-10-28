@@ -227,7 +227,7 @@ function getColumns(
       id: "parallelWith",
       header: "Can run now",
       cell: ({ row }) => (
-        <NumberChips numbers={row.original.parallelWith ?? []} hrefFor={hrefFor} max={3} />
+        <NumberChips numbers={row.original.parallelWith ?? []} hrefFor={hrefFor} max={1} />
       ),
       enableSorting: false,
     },
