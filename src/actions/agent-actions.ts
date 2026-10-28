@@ -51,6 +51,7 @@ import {
   type StageView,
 } from "@/lib/agents/run-stages";
 import { runChanges, runFileDiff, type RunChanges } from "@/lib/agents/run-changes";
+import { isSplitStory } from "@/lib/agents/split-story";
 import type { ActionResult } from "@/lib/types";
 
 const repoSchema = z.object({
@@ -125,6 +126,14 @@ export async function startAgentRun(
   const access = await requireAgentProject(owner, name);
   if (!access.success) return access;
   const { userId, repoKey, localPath } = access.data;
+
+  if (await isSplitStory(localPath, storyId)) {
+    return {
+      success: false,
+      error: `Story ${storyId} is opgesplitst in subtaken. Start een subtaak (bijvoorbeeld ${storyId}a) in plaats daarvan.`,
+      code: "VALIDATION_ERROR",
+    };
+  }
 
   try {
     const repo = await getAuthenticatedRepoConfig(userId, owner, name);
