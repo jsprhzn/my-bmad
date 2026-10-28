@@ -127,9 +127,6 @@ export function AutorunnerStoryRow({
             <Button variant="outline" size="sm" onClick={() => setChangesOpen(true)}>
               Context
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setLogOpen(true)}>
-              Volledige log
-            </Button>
           </div>
         </div>
       </div>
@@ -172,27 +169,32 @@ export function AutorunnerStoryRow({
         </p>
       )}
 
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={pending}
-          onClick={() =>
-            void act(() =>
-              setAgentRunPaused({ owner, name: repo, runId: story.runId, paused: !story.paused }),
-            )
-          }
-        >
-          {story.paused ? "Hervatten" : "Pauzeren"}
+      <div className="flex flex-wrap justify-between gap-2">
+        <Button variant="outline" size="sm" onClick={() => setLogOpen(true)}>
+          Volledige log
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={pending}
-          onClick={() => void act(() => stopAgentRun({ owner, name: repo, runId: story.runId }))}
-        >
-          Stoppen
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pending}
+            onClick={() =>
+              void act(() =>
+                setAgentRunPaused({ owner, name: repo, runId: story.runId, paused: !story.paused }),
+              )
+            }
+          >
+            {story.paused ? "Hervatten" : "Pauzeren"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pending}
+            onClick={() => void act(() => stopAgentRun({ owner, name: repo, runId: story.runId }))}
+          >
+            Stoppen
+          </Button>
+        </div>
       </div>
 
       <RunChangesSheet
