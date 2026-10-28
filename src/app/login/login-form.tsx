@@ -36,15 +36,15 @@ export function LoginForm({ githubEnabled, registrationEnabled }: LoginFormProps
     setError(null);
 
     if (!email || !password) {
-      setError("Email et mot de passe requis.");
+      setError("Email and password are required.");
       return;
     }
     if (password.length < 8) {
-      setError("Le mot de passe doit contenir au moins 8 caractères.");
+      setError("The password must be at least 8 characters.");
       return;
     }
     if (isSignUp && !name.trim()) {
-      setError("Le nom est requis pour l'inscription.");
+      setError("A name is required to sign up.");
       return;
     }
 
@@ -63,8 +63,8 @@ export function LoginForm({ githubEnabled, registrationEnabled }: LoginFormProps
           const code = result.error.status;
           setError(
             code === 403
-              ? "L'inscription est désactivée sur ce serveur."
-              : "Erreur lors de l'inscription."
+              ? "Sign-up is disabled on this server."
+              : "Sign-up failed."
           );
           setLoading(false);
           return;
@@ -75,19 +75,19 @@ export function LoginForm({ githubEnabled, registrationEnabled }: LoginFormProps
           password,
         });
         if (result.error) {
-          setError("Email ou mot de passe incorrect.");
+          setError("Email or password is incorrect.");
           setLoading(false);
           return;
         }
       }
       router.push("/");
     } catch {
-      setError("Une erreur inattendue s'est produite.");
+      setError("An unexpected error occurred.");
       setLoading(false);
     }
   }
 
-  const displayError = error ?? (urlError ? "Échec de la connexion. Veuillez réessayer." : null);
+  const displayError = error ?? (urlError ? "Sign-in failed. Please try again." : null);
 
   return (
     <Card className="glass-card w-full max-w-sm">
@@ -101,7 +101,7 @@ export function LoginForm({ githubEnabled, registrationEnabled }: LoginFormProps
         />
         <CardTitle className="text-2xl font-bold">MyBMAD</CardTitle>
         <CardDescription>
-          {isSignUp ? "Créer un compte" : "Connectez-vous à votre dashboard"}
+          {isSignUp ? "Create an account" : "Sign in to your dashboard"}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -131,7 +131,7 @@ export function LoginForm({ githubEnabled, registrationEnabled }: LoginFormProps
           />
           <Input
             type="password"
-            placeholder="Mot de passe"
+            placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={loading}
@@ -158,8 +158,8 @@ export function LoginForm({ githubEnabled, registrationEnabled }: LoginFormProps
             disabled={loading}
           >
             {isSignUp
-              ? "Déjà un compte ? Se connecter"
-              : "Pas de compte ? S'inscrire"}
+              ? "Already have an account? Sign in"
+              : "No account? Sign up"}
           </button>
         )}
 
@@ -189,7 +189,7 @@ export function LoginForm({ githubEnabled, registrationEnabled }: LoginFormProps
               ) : (
                 <Github className="mr-2 h-5 w-5" />
               )}
-              Continuer avec GitHub
+              Continue with GitHub
             </Button>
           </>
         )}
