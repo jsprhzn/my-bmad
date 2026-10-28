@@ -458,6 +458,12 @@ export async function getRun(
   };
 }
 
+/** A run's stream-json output as written, for the stage and log views. */
+export async function readRunStream(id: string): Promise<string> {
+  if (!RUN_ID.test(id)) return "";
+  return readText(runFile(id, "jsonl"));
+}
+
 /** A run's own output, as the log shows it. */
 async function ownLog(run: AgentRun, jsonl: string): Promise<string> {
   const stderr = (await readText(runFile(run.id, "stderr.log"))).trim();

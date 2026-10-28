@@ -24,6 +24,7 @@ import {
 import { buildAgentPrompt } from "./prompts";
 import { listProjectSkills } from "./project-skills";
 import { recommendedModel, type AgentRunKind } from "./models";
+import type { PlannedModels } from "./run-stages";
 import { listRuns, startRun } from "./run-store";
 import { allowanceFor, quotaLoad, readQuota } from "./quota";
 
@@ -75,7 +76,11 @@ export async function runAutorunner(file: string): Promise<void> {
         continue;
       }
       // Stopped on purpose ("Stop nu"): neither done nor a failure.
-      if (run.status === "cancelled") continue;
+      // Stopped by hand: the queue does not take the story up again.
+      if (run.status === "cancelled") {
+        if (!state.skipped.includes(story.number)) state.skipped.push(story.number);
+        continue;
+      }
       if (run.status === "completed") {
         if (story.phase === "build") {
           const sprint = project.statusOf.get(story.number) ?? "unknown";
@@ -123,6 +128,7 @@ export async function runAutorunner(file: string): Promise<void> {
       ...active.map((a) => a.number),
       ...waiting.map((w) => w.number),
       ...state.done,
+      ...state.skipped,
       ...runs.filter((r) => r.status === "running").map((r) => r.storyId),
     ]);
     const due = waiting.filter((w) => Date.parse(w.at) <= now.getTime());
@@ -133,7 +139,13 @@ export async function runAutorunner(file: string): Promise<void> {
         const story = project.stories.find((s) => s.number === retry.number);
         if (!story) continue;
         const runId = await startStoryRun(started, state, account, retry.phase, story, project, retry.phase === "build" ? buildSkill : reviewSkill);
-        active.push({ key: story.key, number: story.number, phase: retry.phase, runId });
+        active.push({
+          key: story.key,
+          number: story.number,
+          phase: retry.phase,
+          runId,
+          models: plannedModels(project.advice.get(story.number)),
+        });
         waiting.splice(waiting.findIndex((w) => w.number === retry.number), 1);
         busy.add(story.number);
         free -= 1;
@@ -141,7 +153,13 @@ export async function runAutorunner(file: string): Promise<void> {
       const fresh = nextStories({ stories: project.stories, graph: project.graph, busy, slots: free });
       for (const story of fresh) {
         const runId = await startStoryRun(started, state, account, "build", story, project, buildSkill);
-        active.push({ key: story.key, number: story.number, phase: "build", runId });
+        active.push({
+          key: story.key,
+          number: story.number,
+          phase: "build",
+          runId,
+          models: plannedModels(project.advice.get(story.number)),
+        });
       }
     }
 
@@ -257,6 +275,15 @@ async function startStoryRun(
 /** "1-2-sign-up-and-sign-in" → "sign up and sign in", for the prompt. */
 function titleFromKey(key: string): string {
   return key.replace(/^\d+-\d+[a-z]?-/, "").replace(/-/g, " ");
+}
+
+function plannedModels(advice: ModelAdviceRow | undefined): PlannedModels {
+  return {
+    brainstorm: recommendedModel("brainstorm", advice),
+    plan: recommendedModel("plan", advice),
+    dev: recommendedModel("dev", advice),
+    review: recommendedModel("review", advice),
+  };
 }
 
 async function finish(

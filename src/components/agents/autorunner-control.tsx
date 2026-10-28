@@ -25,10 +25,12 @@ import type { Quota, QuotaWindow } from "@/lib/agents/quota";
 import {
   getAgentUsage,
   listAutorunnerViews,
+  setAutorunnerPaused,
   startAutorunner,
   stopAutorunner,
   type AutorunnerView,
 } from "@/actions/agent-actions";
+import { AutorunnerStoryRow } from "./autorunner-story";
 
 /** Reload the queue this often while the page is open. */
 const POLL_MS = 10000;
@@ -65,20 +67,26 @@ function RunnerHistory({ views }: { views: AutorunnerView[] }) {
   );
 }
 
-/** The plan limit as Claude Code reports it: the session and the week, with when each resets. */
+/** The plan limit as Claude Code reports it: the session and the week, as compact chips with when each resets. */
 function QuotaLine({ quota }: { quota: Quota }) {
-  const window = (label: string, w: QuotaWindow | null) =>
+  const chip = (label: string, w: QuotaWindow | null) =>
     w && (
-      <span>
-        {label}: {w.usedPercent}% gebruikt · reset {w.resets}
+      <span className="inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-medium">{w.usedPercent}%</span>
+        <span className="text-muted-foreground">reset {w.resets}</span>
       </span>
     );
   return (
-    <p className="flex flex-wrap gap-x-4 text-xs text-muted-foreground">
-      {window("Sessie", quota.session)}
-      {window("Week", quota.week)}
-    </p>
+    <div className="flex flex-wrap gap-2">
+      {chip("Sessie", quota.session)}
+      {chip("Week", quota.week)}
+    </div>
   );
+}
+
+function allPaused(view: AutorunnerView): boolean {
+  return view.stories.length > 0 && view.stories.every((story) => story.paused);
 }
 
 /**
@@ -134,6 +142,16 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
     }
   };
 
+  const pauseAll = async (id: string, paused: boolean) => {
+    setError(null);
+    const result = await setAutorunnerPaused({ owner, name: repo, id, paused });
+    if (result.success) {
+      await reload();
+    } else {
+      setError(result.error);
+    }
+  };
+
   const stop = async (id: string, now: boolean) => {
     setError(null);
     const result = await stopAutorunner({ owner, name: repo, id, now });
@@ -148,35 +166,55 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
     <div className="space-y-2">
       {quota && <QuotaLine quota={quota} />}
       {current ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm">
-          <Loader2 className="size-4 animate-spin text-muted-foreground" />
-          <div className="min-w-0 flex-1 space-y-0.5">
-            <p className="font-medium">Autorunner draait · {MODE_LABELS[current.mode]}</p>
-            <p className="text-muted-foreground">
-              {current.done.length} klaar · {current.active.length} bezig · {current.runCount} runs uitgevoerd
-              {current.waiting.length > 0 && " · wacht op token-limiet"}
-              {!current.driverAlive && " · de runner lijkt te zijn onderbroken"}
-            </p>
-            {current.note && <p className="text-muted-foreground">{current.note}</p>}
+        <div className="space-y-3 rounded-lg border p-3 text-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <p className="font-medium">Autorunner draait · {MODE_LABELS[current.mode]}</p>
+              <p className="text-muted-foreground">
+                {current.done.length} klaar · {current.active.length} bezig · {current.runCount} runs uitgevoerd
+                {current.waiting.length > 0 && " · wacht op token-limiet"}
+                {!current.driverAlive && " · de runner lijkt te zijn onderbroken"}
+              </p>
+              {current.note && <p className="text-muted-foreground">{current.note}</p>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {current.stories.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void pauseAll(current.id, !allPaused(current))}
+                >
+                  {allPaused(current) ? "Hervat alles" : "Pauzeer alles"}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void stop(current.id, false)}
+                disabled={current.stopRequested}
+              >
+                {current.stopRequested ? "Stoppen…" : "Stop na huidige"}
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => void stop(current.id, true)}
+                disabled={current.stopRequested && current.active.length === 0}
+              >
+                Stop nu
+              </Button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void stop(current.id, false)}
-              disabled={current.stopRequested}
-            >
-              {current.stopRequested ? "Stoppen…" : "Stop na huidige"}
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => void stop(current.id, true)}
-              disabled={current.stopRequested && current.active.length === 0}
-            >
-              Stop nu
-            </Button>
-          </div>
+          {current.stories.map((story) => (
+            <AutorunnerStoryRow
+              key={story.runId}
+              owner={owner}
+              repo={repo}
+              story={story}
+              onChanged={reload}
+            />
+          ))}
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-3">
