@@ -4,6 +4,7 @@ import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
+  getExpandedRowModel,
   getPaginationRowModel,
   type ColumnDef,
   type SortingState,
@@ -111,11 +112,50 @@ function storyHref(basePath: string, storyId: string) {
   return `${basePath}/${encodeURIComponent(storyId)}`;
 }
 
+/** A story row; a split story's subtasks hang under it as subRows. */
+type StoryRow = StoryDetail & { subRows?: StoryRow[] };
+
+/** "4.1a" → a subtask of "4.1". */
+const SUBTASK_ID = /^(\d+\.\d+)[a-z]$/;
+
+/**
+ * Nest the subtasks of split stories under their parent row, and count how many of them are done.
+ * A subtask whose parent is not in the list shows as a row of its own.
+ */
+function buildRows(stories: StoryDetail[], lookup: StoryDetail[]) {
+  const progress = new Map<string, { done: number; total: number }>();
+  for (const story of lookup) {
+    const parent = SUBTASK_ID.exec(story.id)?.[1];
+    if (!parent || !lookup.some((s) => s.id === parent && s.status === "split")) continue;
+    const count = progress.get(parent) ?? { done: 0, total: 0 };
+    count.total += 1;
+    if (story.status === "done") count.done += 1;
+    progress.set(parent, count);
+  }
+
+  const splitIds = new Set(stories.filter((s) => s.status === "split").map((s) => s.id));
+  const children = new Map<string, StoryRow[]>();
+  for (const story of stories) {
+    const parent = SUBTASK_ID.exec(story.id)?.[1];
+    if (!parent || !splitIds.has(parent)) continue;
+    children.set(parent, [...(children.get(parent) ?? []), story]);
+  }
+
+  const rows: StoryRow[] = stories
+    .filter((story) => {
+      const parent = SUBTASK_ID.exec(story.id)?.[1];
+      return !(parent && splitIds.has(parent));
+    })
+    .map((story) => ({ ...story, subRows: children.get(story.id) }));
+  return { rows, progress };
+}
+
 function getColumns(
   basePath: string,
   running: Map<string, string>,
   storyByNumber: Map<string, StoryDetail>,
-): ColumnDef<StoryDetail>[] {
+  progress: Map<string, { done: number; total: number }>,
+): ColumnDef<StoryRow>[] {
   const hrefFor = (number: string) => {
     const story = storyByNumber.get(number);
     return story ? storyHref(basePath, story.id) : null;
@@ -139,13 +179,15 @@ function getColumns(
         <DataGridColumnHeader column={column} title="Title" />
       ),
       cell: ({ row }) => (
-        <Link
-          href={storyHref(basePath, row.original.id)}
-          onClick={(e) => e.stopPropagation()}
-          className="font-medium hover:underline"
-        >
-          {row.getValue("title")}
-        </Link>
+        <div style={{ paddingLeft: row.depth * 24 }}>
+          <Link
+            href={storyHref(basePath, row.original.id)}
+            onClick={(e) => e.stopPropagation()}
+            className="font-medium hover:underline"
+          >
+            {row.getValue("title")}
+          </Link>
+        </div>
       ),
     },
     {
@@ -153,12 +195,20 @@ function getColumns(
       header: ({ column }) => (
         <DataGridColumnHeader column={column} title="Status" />
       ),
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <StatusBadge status={row.getValue("status")} />
-          {running.has(row.original.id) && <RunningBadge href={running.get(row.original.id)} />}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const count = progress.get(row.original.id);
+        return (
+          <div className="flex items-center gap-2">
+            <StatusBadge status={row.getValue("status")} />
+            {count && (
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {count.done}/{count.total} done
+              </span>
+            )}
+            {running.has(row.original.id) && <RunningBadge href={running.get(row.original.id)} />}
+          </div>
+        );
+      },
     },
     {
       id: "dependsOn",
@@ -242,7 +292,7 @@ export function StoriesTable({ stories, lookup = stories }: StoriesTableProps) {
             <h2 className="text-lg font-medium">{group.title}</h2>
             <span className="text-sm text-muted-foreground">{group.stories.length} stories</span>
           </div>
-          <StoriesGrid stories={group.stories} storyByNumber={storyByNumber} />
+          <StoriesGrid stories={group.stories} lookup={lookup} storyByNumber={storyByNumber} />
         </section>
       ))}
     </div>
@@ -251,26 +301,30 @@ export function StoriesTable({ stories, lookup = stories }: StoriesTableProps) {
 
 function StoriesGrid({
   stories,
+  lookup = stories,
   storyByNumber,
 }: StoriesTableProps & { storyByNumber: Map<string, StoryDetail> }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const router = useRouter();
   const pathname = usePathname();
   const running = useRunningStoryIds();
+  const { rows, progress } = useMemo(() => buildRows(stories, lookup), [stories, lookup]);
   const columns = useMemo(
-    () => getColumns(pathname, running, storyByNumber),
-    [pathname, running, storyByNumber],
+    () => getColumns(pathname, running, storyByNumber, progress),
+    [pathname, running, storyByNumber, progress],
   );
 
   const table = useReactTable({
-    data: stories,
+    data: rows,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getExpandedRowModel: getExpandedRowModel(),
+    getSubRows: (row) => row.subRows,
     getPaginationRowModel: getPaginationRowModel(),
     onSortingChange: setSorting,
     state: { sorting },
-    initialState: { pagination: { pageSize: 20 } },
+    initialState: { pagination: { pageSize: 20 }, expanded: true },
   });
 
   const handleRowClick = (story: StoryDetail) => {
