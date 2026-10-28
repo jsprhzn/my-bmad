@@ -1,15 +1,15 @@
 const ERROR_MESSAGES: Record<string, string> = {
-  DB_ERROR: "Une erreur s'est produite. Veuillez réessayer.",
-  GITHUB_ERROR: "Erreur lors de la communication avec GitHub.",
-  FS_ERROR: "Erreur lors de la lecture du système de fichiers.",
-  LOCAL_DISABLED: "Le mode local n'est pas activé sur ce serveur.",
+  DB_ERROR: "An error occurred. Please try again.",
+  GITHUB_ERROR: "Error communicating with GitHub.",
+  FS_ERROR: "Error reading the file system.",
+  LOCAL_DISABLED: "Local mode is not enabled on this server.",
   PATH_NOT_FOUND:
-    "Ce chemin n'existe pas sur le serveur. La fonctionnalité dossiers locaux nécessite un déploiement self-hosted.",
-  PATH_STALE: "Ce dossier local n'existe plus ou a été déplacé.",
-  REGISTRATION_DISABLED: "L'inscription est désactivée sur ce serveur.",
+    "This path does not exist on the server. Local folders require a self-hosted deployment.",
+  PATH_STALE: "This local folder no longer exists or has been moved.",
+  REGISTRATION_DISABLED: "Sign-up is disabled on this server.",
 };
 
 export function sanitizeError(error: unknown, code: string): string {
   console.error(`[${code}]`, error);
-  return ERROR_MESSAGES[code] ?? "Une erreur inattendue s'est produite.";
+  return ERROR_MESSAGES[code] ?? "An unexpected error occurred.";
 }

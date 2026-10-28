@@ -100,7 +100,7 @@ export async function listUserRepos(): Promise<ActionResult<GitHubRepo[]>> {
   const { octokit, userId } = authResult.data;
 
   if (!checkRateLimit(`list:${userId}`, 30, 60000)) {
-    return { success: false, error: "Trop de requêtes", code: "RATE_LIMIT" };
+    return { success: false, error: "Too many requests", code: "RATE_LIMIT" };
   }
 
   try {
@@ -252,7 +252,7 @@ export async function importRepo(input: {
   const { userId } = authResult.data;
 
   if (!checkRateLimit(`import:${userId}`, 10, 60000)) {
-    return { success: false, error: "Trop de requêtes", code: "RATE_LIMIT" };
+    return { success: false, error: "Too many requests", code: "RATE_LIMIT" };
   }
 
   try {
@@ -862,7 +862,7 @@ export async function importLocalFolder(input: {
 
   // F3: Rate limit
   if (!checkRateLimit(`import-local:${userId}`, 10, 60000)) {
-    return { success: false, error: "Trop de requêtes", code: "RATE_LIMIT" };
+    return { success: false, error: "Too many requests", code: "RATE_LIMIT" };
   }
 
   try {
