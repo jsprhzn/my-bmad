@@ -52,7 +52,7 @@ const projectTabs = [
   { label: "Stories", segment: "stories", icon: BookOpen },
   { label: "Agents", segment: "runs", icon: Bot },
   { label: "Library", segment: "docs", icon: FileText },
-  { label: "Documentatie", segment: "documentatie", icon: FileCode },
+  { label: "Documentation", segment: "documentatie", icon: FileCode },
 ];
 
 export function AppSidebar({ repos, showAdmin, localFsEnabled, githubEnabled }: AppSidebarProps) {
