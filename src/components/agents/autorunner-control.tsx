@@ -76,6 +76,7 @@ function allPaused(view: AutorunnerView): boolean {
  */
 export function AutorunnerControl({ owner, repo }: { owner: string; repo: string }) {
   const [views, setViews] = useState<AutorunnerView[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<AutorunnerView["mode"]>("serial");
   const [review, setReview] = useState(true);
@@ -88,6 +89,7 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
       const result = await listAutorunnerViews({ owner, name: repo });
       if (alive && result.success) {
         setViews(result.data);
+        setLoaded(true);
       }
     };
     void poll();
@@ -192,7 +194,7 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
             />
           ))}
         </div>
-      ) : (
+      ) : loaded ? (
         <div className="flex flex-wrap items-center gap-3">
           <Dialog open={open} onOpenChange={(next) => !pending && setOpen(next)}>
             <DialogTrigger asChild>
@@ -267,7 +269,7 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
           </Dialog>
 
         </div>
-      )}
+      ) : null}
       {finished.length > 0 && <RunnerHistory views={finished} />}
       {!current && error && (
         <p className="text-sm text-destructive" role="alert">
