@@ -161,6 +161,8 @@ export interface AutorunnerState {
   done: string[];
   /** Stories stopped by hand from the queue: not taken up again. */
   skipped: string[];
+  /** Split large stories into subtasks before they are built. */
+  splitLarge?: boolean;
   /** Large stories already split, or tried: they are built, not split again. */
   split?: string[];
   /** Every run the queue started, in order: its tokens and cost are summed from these. */
