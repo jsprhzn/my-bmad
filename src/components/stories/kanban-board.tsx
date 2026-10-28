@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { StaggeredList, StaggeredItem } from "@/components/shared/staggered-list";
 import type { StoryDetail, StoryStatus } from "@/lib/bmad/types";
 import { getStoryShortId } from "@/lib/bmad/utils";
+import { cn } from "@/lib/utils";
 
 const kanbanColumns: { status: StoryStatus; label: string; color: string }[] = [
   { status: "backlog", label: "Backlog", color: "bg-muted-foreground" },
@@ -17,9 +18,15 @@ const kanbanColumns: { status: StoryStatus; label: string; color: string }[] = [
 
 interface KanbanBoardProps {
   stories: StoryDetail[];
+  /** Leave out the Done column, so the stories still in progress stand out. */
+  hideDone?: boolean;
 }
 
-export function KanbanBoard({ stories }: KanbanBoardProps) {
+export function KanbanBoard({ stories, hideDone = false }: KanbanBoardProps) {
+  const columns = hideDone
+    ? kanbanColumns.filter((col) => col.status !== "done")
+    : kanbanColumns;
+
   if (stories.length === 0) {
     return (
       <div className="flex items-center justify-center h-32 rounded-lg border border-dashed border-border/50 text-muted-foreground">
@@ -29,8 +36,13 @@ export function KanbanBoard({ stories }: KanbanBoardProps) {
   }
 
   return (
-    <StaggeredList className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-      {kanbanColumns.map((col) => {
+    <StaggeredList
+      className={cn(
+        "grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3",
+        hideDone ? "xl:grid-cols-5" : "xl:grid-cols-6",
+      )}
+    >
+      {columns.map((col) => {
         const columnStories = stories.filter(
           (s) =>
             s.status === col.status ||

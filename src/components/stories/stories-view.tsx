@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { LayoutList, Columns3 } from "lucide-react";
+import { LayoutList, Columns3, Eye, EyeOff } from "lucide-react";
 import { StoryFilters, type Filter } from "./story-filters";
 import { StoriesTable } from "./stories-table";
 import { KanbanBoard } from "./kanban-board";
@@ -18,6 +18,7 @@ export function StoriesView({ stories, epics }: StoriesViewProps) {
   const [view, setView] = useState<"table" | "kanban">("table");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Filter<string>[]>([]);
+  const [hideDone, setHideDone] = useState(false);
 
   const applyFilters = useCallback(
     (story: StoryDetail) => {
@@ -67,35 +68,49 @@ export function StoriesView({ stories, epics }: StoriesViewProps) {
           onFiltersChange={setFilters}
           epics={epics}
         />
-        <div className="flex gap-1 border rounded-lg p-1" role="group" aria-label="Display mode">
-          <Button
-            variant={view === "table" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setView("table")}
-            className="gap-1.5"
-            aria-label="Table view"
-          >
-            <LayoutList className="h-4 w-4" />
-            <span className="hidden sm:inline">Table</span>
-          </Button>
-          <Button
-            variant={view === "kanban" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setView("kanban")}
-            className="gap-1.5"
-            aria-label="Kanban view"
-          >
-            <Columns3 className="h-4 w-4" />
-            <span className="hidden sm:inline">Board</span>
-          </Button>
+        <div className="flex items-center gap-2">
+          {view === "kanban" && (
+            <Button
+              variant={hideDone ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => setHideDone((hide) => !hide)}
+              aria-pressed={hideDone}
+              className="gap-1.5"
+            >
+              {hideDone ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              <span className="hidden sm:inline">{hideDone ? "Show done" : "Hide done"}</span>
+            </Button>
+          )}
+          <div className="flex gap-1 border rounded-lg p-1" role="group" aria-label="Display mode">
+            <Button
+              variant={view === "table" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setView("table")}
+              className="gap-1.5"
+              aria-label="Table view"
+            >
+              <LayoutList className="h-4 w-4" />
+              <span className="hidden sm:inline">Table</span>
+            </Button>
+            <Button
+              variant={view === "kanban" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setView("kanban")}
+              className="gap-1.5"
+              aria-label="Kanban view"
+            >
+              <Columns3 className="h-4 w-4" />
+              <span className="hidden sm:inline">Board</span>
+            </Button>
+          </div>
         </div>
       </StaggeredItem>
 
       <StaggeredItem>
         {view === "table" ? (
-          <StoriesTable stories={filtered} />
+          <StoriesTable stories={filtered} lookup={stories} />
         ) : (
-          <KanbanBoard stories={filtered} />
+          <KanbanBoard stories={filtered} hideDone={hideDone} />
         )}
       </StaggeredItem>
     </StaggeredList>

@@ -59,7 +59,7 @@ export interface StoryDetail {
   modelAdvice?: StoryModelAdvice;
   /** Project-relative paths of the story's own file(s); absent for sprint-status stubs. */
   sourcePaths?: string[];
-  /** Story numbers ("1.2") this story needs, directly or through others; from story-dependencies.yaml. */
+  /** Story numbers ("1.2") this story needs directly; from story-dependencies.yaml. */
   dependsOn?: string[];
   /** Story numbers of open stories that can be built now, alongside this one. */
   parallelWith?: string[];

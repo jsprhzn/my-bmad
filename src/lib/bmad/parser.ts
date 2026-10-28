@@ -135,6 +135,8 @@ export async function getBmadProject(
     if (!p.includes(IMPLEMENTATION) || !p.endsWith(".md")) return false;
     const filename = (p.split("/").pop() || "").replace(STORY_FILE_PREFIX, "");
     if (NON_STORY_FILE_PREFIX.test(filename)) return false;
+    // A backup of a spec that was never committed; the real spec is the story.
+    if (/\.untracked-backup\.md$/i.test(filename)) return false;
     if (/^\d+-\d+[a-z]?-.+\.md$/i.test(filename)) return true;
     if (/^[a-z][a-z0-9_-]*-\d+-.+\.md$/i.test(filename)) return true;
     if (/^story[_-]?\d/i.test(filename)) return true;

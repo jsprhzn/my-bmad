@@ -84,10 +84,12 @@ export function attachStoryGraph(stories: StoryDetail[], graph: StoryGraph): Sto
   return stories.map((story) => {
     const id = storyNumber(story.id);
     if (!id || !graph.has(id)) return story;
+    // Parallel work only matters for a story that is still to be built.
+    const open = story.status !== "done" && story.status !== "review";
     return {
       ...story,
-      dependsOn: [...requiredStories(id, graph)].sort(),
-      parallelWith: parallelStories(id, graph, statusById),
+      dependsOn: [...(graph.get(id) ?? [])].sort(),
+      parallelWith: open ? parallelStories(id, graph, statusById) : [],
     };
   });
 }
