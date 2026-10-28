@@ -41,6 +41,35 @@ MyBMAD Dashboard connects to your GitHub repositories (or local folders), reads 
 
 ---
 
+## What is new in this fork
+
+This fork adds agent management on top of the dashboard: start and monitor Claude Code runs per
+story, and let an autorunner work through the backlog. The screenshots below are from this fork.
+
+- **Agent runs per story:** start dev and review runs with Claude Code, plan a story up to
+  `ready-for-dev`, and choose the BMAD agent or skill and the model for each action. Each run card
+  shows start time, duration, model and cost, and can be paused or stopped.
+- **Autorunner:** a project-wide queue that runs stories one at a time (optional), with *Stop now*
+  and *Stop after current*. It paces its starts by the plan quota Claude reports, shows the session
+  and week limits at the top of the agents page, can keep the computer awake, and can split large
+  stories into subtasks first (optional).
+- **Run visibility:** a context panel per run with the story's artifacts, changed files and readable
+  diffs; a headline-only log with a full log dialog; and a Claude account per project.
+- **Stories:** a board and a table view, a *Can run now* column, the stories that wait on each story,
+  and split subtasks nested under their parent with a done count. A split story cannot be started
+  as a single run.
+- **Documentation:** a Documentatie tab, open-as-HTML buttons for specs, and `.html` files rendered
+  in the library.
+- **Interface:** the UI is in English.
+
+![Agent runs with the autorunner](docs/fork-agents-dark.jpg)
+
+![Stories board and table](docs/fork-stories-dark.jpg)
+
+![Dashboard with progress per epic](docs/fork-dashboard-dark.jpg)
+
+---
+
 <img width="1720" alt="Screenshot 1" src="./docs/screen1.png" />
 <img width="1720" alt="Screenshot 2" src="./docs/screen2.png" />
 <img width="1720" alt="Screenshot 3" src="./docs/screen3.png" />
