@@ -130,6 +130,7 @@ export async function runAutorunner(file: string): Promise<void> {
           at: retryAt(text, now).toISOString(),
           attempts,
           buildRunId: story.buildRunId,
+          runId: story.runId,
         });
         continue;
       }
@@ -163,16 +164,14 @@ export async function runAutorunner(file: string): Promise<void> {
           failure = `${retry.key}: de branch van de build is weg; de review kan niet opnieuw starten.`;
           continue;
         }
-        const runId = await startStoryRun(
-          started,
-          state,
-          account,
-          retry.phase,
-          story,
-          project,
-          retry.phase === "build" ? buildSkill : reviewSkill,
-          { hold: retry.phase === "build" && state.review, reuse: held },
-        );
+        const skill = retry.phase === "build" ? buildSkill : reviewSkill;
+        const options = { hold: retry.phase === "build" && state.review, reuse: held };
+        // A retry after a limit continues the same run; a new run only when that run has no session to continue.
+        const start = (extra: { continueRunId?: string }) =>
+          startStoryRun(started, state, account, retry.phase, story, project, skill, { ...options, ...extra });
+        const runId = retry.runId
+          ? await start({ continueRunId: retry.runId }).catch(() => start({}))
+          : await start({});
         active.push({
           key: story.key,
           number: story.number,
@@ -293,7 +292,7 @@ async function startStoryRun(
   story: Pick<QueueStory, "number" | "key">,
   project: Project,
   skill: string,
-  options: { hold?: boolean; reuse?: HeldBranch | null } = {},
+  options: { hold?: boolean; reuse?: HeldBranch | null; continueRunId?: string } = {},
 ): Promise<string> {
   const kind: AgentRunKind = phase === "build" ? "dev" : "review";
   const advice = project.advice.get(story.number);
@@ -311,18 +310,26 @@ async function startStoryRun(
     permissionMode: "auto",
     hold: options.hold,
     reuseBuild: options.reuse ?? undefined,
-    prompt: buildAgentPrompt({
-      kind,
-      skill,
-      storyId: story.number,
-      storyTitle: titleFromKey(story.key),
-      sourcePaths: existsSync(path.join(state.localPath, sourcePath)) ? [sourcePath] : [],
-      fixFindings: true,
-    }),
+    continueRunId: options.continueRunId,
+    prompt: options.continueRunId
+      ? CONTINUE_PROMPT
+      : buildAgentPrompt({
+          kind,
+          skill,
+          storyId: story.number,
+          storyTitle: titleFromKey(story.key),
+          sourcePaths: existsSync(path.join(state.localPath, sourcePath)) ? [sourcePath] : [],
+          fixFindings: true,
+        }),
   });
-  started.push(run.id);
+  // A continued run is already in the queue's list of runs; only a new run is added.
+  if (!options.continueRunId) started.push(run.id);
   return run.id;
 }
+
+/** What a continued run is told: the limit has reset, so pick up where it stopped. */
+const CONTINUE_PROMPT =
+  "Ga verder waar je gebleven bent. Rond de taak af en leg alle wijzigingen vast met git commit.";
 
 /** "1-2-sign-up-and-sign-in" → "sign up and sign in", for the prompt. */
 function titleFromKey(key: string): string {
