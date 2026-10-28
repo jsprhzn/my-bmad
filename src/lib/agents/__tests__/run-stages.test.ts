@@ -42,7 +42,21 @@ describe("logTail", () => {
       toolUse("Read", { file_path: "b.ts" }),
       text("Derde"),
     ].join("\n");
-    expect(logTail(stream, 2)).toEqual(["Tweede", "Derde"]);
+    expect(logTail(stream, 2)).toEqual([
+      { at: null, text: "Tweede" },
+      { at: null, text: "Derde" },
+    ]);
+  });
+
+  it("gives each headline the time its line was written", () => {
+    const stamped = (value: string, at: string) =>
+      JSON.stringify({
+        type: "assistant",
+        message: { content: [{ type: "text", text: value }] },
+        _ts: at,
+      });
+    const stream = [stamped("Eerste", "2026-10-28T18:00:01.250Z"), toolUse("Read", { file_path: "a.ts" })].join("\n");
+    expect(logTail(stream, 3)).toEqual([{ at: "2026-10-28T18:00:01.250Z", text: "Eerste" }]);
   });
 });
 

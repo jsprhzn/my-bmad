@@ -64,6 +64,12 @@ export interface AgentRun {
 export const DEFAULT_AGENT_COMMAND =
   "claude -p --model {model} --permission-mode {permission_mode} --output-format stream-json --verbose";
 
+/**
+ * Adds the time each stream-json line was written as "_ts" (UTC, to the millisecond), so the log can show
+ * when it happened. Lines that are not JSON objects pass through unchanged.
+ */
+const STAMP_STREAM = `use Time::HiRes qw(gettimeofday); use POSIX qw(strftime); $| = 1; while (<STDIN>) { chomp; if (/^\\{.*\\}\\s*$/) { my ($s, $us) = gettimeofday(); my $at = strftime("%Y-%m-%dT%H:%M:%S", gmtime($s)) . sprintf(".%03dZ", int($us / 1000)); s/\\s*\\}\\s*$/,"_ts":"$at"}/; } print "$_\\n"; }`;
+
 const RUN_ID = /^[0-9]{13}-[0-9a-f]{8}$/;
 
 export function agentRunsEnabled(): boolean {
@@ -386,18 +392,19 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
           `cd ${shQuote(worktree)}`,
         ]
       : []),
-    // Braces so a compound command template gets the redirections as a whole.
-    `{ ${agentCommand}; } < ${shQuote(promptFile)} > ${shQuote(runFile(id, "jsonl"))} 2> ${shQuote(runFile(id, "stderr.log"))}`,
+    // Braces so a compound command template gets the redirections as a whole. Claude's exit code goes to its own
+    // file, since the pipe to the stamp reports the stamp's exit code instead.
+    `{ ${agentCommand}; echo $? > ${shQuote(runFile(id, "claude.rc"))}; } < ${shQuote(promptFile)} 2> ${shQuote(runFile(id, "stderr.log"))} | perl -e ${shQuote(STAMP_STREAM)} > ${shQuote(runFile(id, "jsonl"))}`,
     isolated
       ? [
-          "rc=$?",
+          `rc=$(cat ${shQuote(runFile(id, "claude.rc"))} 2>/dev/null || echo 1)`,
           // A held build keeps its branch for the review; its result is written, not merged.
           hold
             ? `if [ $rc -eq 0 ]; then echo held > ${shQuote(mergeResult)}; fi`
             : `if [ $rc -eq 0 ]; then sh ${shQuote(runFile(id, "merge.sh"))}; rc=$?; fi`,
           `echo $rc > ${shQuote(runFile(id, "exit"))}`,
         ].join("; ")
-      : `echo $? > ${shQuote(runFile(id, "exit"))}`,
+      : `echo $(cat ${shQuote(runFile(id, "claude.rc"))} 2>/dev/null || echo 1) > ${shQuote(runFile(id, "exit"))}`,
   ].join("; ");
   if (isolated) {
     // "3.2" becomes the sprint-status key prefix "3-2-".
