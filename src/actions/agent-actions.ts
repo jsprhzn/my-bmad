@@ -536,6 +536,8 @@ export interface AutorunnerStoryView {
   title: string;
   phase: "build" | "review";
   runId: string;
+  /** The run whose changes the story shows: the build's own branch, also during its review. */
+  changesRunId: string;
   paused: boolean;
   branch: string | null;
   startedAt: string;
@@ -600,14 +602,20 @@ async function storyViewsOf(state: AutorunnerState, runs: AgentRun[]): Promise<A
         : story.phase === "review"
           ? "review"
           : (reached.at(-1) ?? "build");
+      // A review works in the checkout, so the story's changes are on the build run's branch.
+      const changes =
+        story.phase === "review" && story.buildRunId
+          ? (runs.find((r) => r.id === story.buildRunId) ?? run)
+          : run;
       return {
         key: story.key,
         number: story.number,
         title: titleOf(story.key),
         phase: story.phase,
         runId: story.runId,
+        changesRunId: changes?.id ?? story.runId,
         paused: run?.paused ?? false,
-        branch: run?.branch ?? null,
+        branch: changes?.branch ?? null,
         startedAt: run?.startedAt ?? state.startedAt,
         stages: stagesOf({
           current,
