@@ -67,6 +67,14 @@ describe("reachedStages with a build subagent", () => {
     JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id }] } });
   const bash = (command: string) => toolUse("Bash", { command });
 
+  it("reaches the build stage when the implementation subagent starts after the plan", () => {
+    const stream = [
+      toolUse("Read", { file_path: "/p/.claude/skills/bmad-build-auto/step-02-plan.md" }),
+      agent("a1"),
+    ].join("\n");
+    expect(reachedStages(stream)).toEqual(["plan", "build"]);
+  });
+
   it("keeps test runs inside a running build subagent in the build stage", () => {
     const stream = [
       toolUse("Read", { file_path: "/p/.claude/skills/bmad-build-auto/step-03-implement.md" }),
