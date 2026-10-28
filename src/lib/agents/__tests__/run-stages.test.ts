@@ -32,16 +32,17 @@ describe("reachedStages", () => {
 });
 
 describe("logTail", () => {
-  it("returns the last lines of the formatted log", () => {
+  it("returns the last headline messages and leaves out tool calls", () => {
+    const text = (value: string) =>
+      JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: value }] } });
     const stream = [
+      text("Eerste"),
       toolUse("Read", { file_path: "a.ts" }),
+      text("Tweede"),
       toolUse("Read", { file_path: "b.ts" }),
-      toolUse("Read", { file_path: "c.ts" }),
-      toolUse("Read", { file_path: "d.ts" }),
+      text("Derde"),
     ].join("\n");
-    const tail = logTail(stream, 2);
-    expect(tail).toHaveLength(2);
-    expect(tail[1]).toContain("d.ts");
+    expect(logTail(stream, 2)).toEqual(["Tweede", "Derde"]);
   });
 });
 

@@ -72,12 +72,15 @@ export function reachedStages(stream: string): StageId[] {
   return reached;
 }
 
-/** The last lines of a run's log, as the log shows them. */
+/**
+ * The last headline messages of a run's log: tool calls, and the indented or list lines under a
+ * message, are left out.
+ */
 export function logTail(stream: string, lines: number): string[] {
   return formatStream(stream)
     .split("\n")
     .map((line) => line.trimEnd())
-    .filter((line) => line.trim())
+    .filter((line) => line.trim() && !/^→ /.test(line) && !/^(\s|[-*]\s|\d+\.\s)/.test(line))
     .slice(-lines);
 }
 
