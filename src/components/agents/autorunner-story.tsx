@@ -117,14 +117,14 @@ export function AutorunnerStoryRow({
           </p>
         </div>
         <div className="flex min-w-0 flex-col items-end gap-2">
-          {story.branch && (
-            <p className="flex max-w-full min-w-0 items-center gap-1 font-mono text-xs text-primary">
-              <GitBranch className="size-3.5 shrink-0" aria-hidden="true" />
-              <span className="truncate">{story.branch}</span>
-            </p>
-          )}
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setChangesOpen(true)}>
+          <div className="flex max-w-full min-w-0 items-center gap-2">
+            {story.branch && (
+              <p className="flex min-w-0 items-center gap-1 font-mono text-xs text-primary">
+                <GitBranch className="size-3.5 shrink-0" aria-hidden="true" />
+                <span className="truncate">{story.branch}</span>
+              </p>
+            )}
+            <Button variant="outline" size="sm" className="shrink-0" onClick={() => setChangesOpen(true)}>
               Context
             </Button>
           </div>
