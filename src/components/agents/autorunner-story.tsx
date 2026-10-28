@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CircleCheck, CircleDashed, GitBranch, Loader2, Minus, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RunChangesSheet } from "./run-changes-sheet";
+import { RunLogDialog } from "./run-log-dialog";
 import { ModelTierBadge } from "@/components/shared/model-badge";
 import { formatTime } from "@/lib/agents/format";
 import type { StageView } from "@/lib/agents/run-stages";
@@ -87,6 +88,7 @@ export function AutorunnerStoryRow({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [changesOpen, setChangesOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
   const active = story.stages.find((s) => s.state === "active");
   const phaseLabel = active?.label ?? "Wacht";
 
@@ -124,6 +126,9 @@ export function AutorunnerStoryRow({
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setChangesOpen(true)}>
               Context
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setLogOpen(true)}>
+              Volledige log
             </Button>
           </div>
         </div>
@@ -198,6 +203,14 @@ export function AutorunnerStoryRow({
         title={`${story.number} · ${story.title}`}
         open={changesOpen}
         onOpenChange={setChangesOpen}
+      />
+      <RunLogDialog
+        owner={owner}
+        repo={repo}
+        runId={story.runId}
+        title={`${story.number} · ${story.title}`}
+        open={logOpen}
+        onOpenChange={setLogOpen}
       />
     </div>
   );
