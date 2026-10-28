@@ -1,5 +1,5 @@
 import type { ModelTier } from "@/lib/bmad/types";
-import { formatStream } from "./stream-format";
+import { formatStreamLine } from "./stream-format";
 
 /**
  * The stages of a story in the autorunner queue, read from the run output.
@@ -72,16 +72,27 @@ export function reachedStages(stream: string): StageId[] {
   return reached;
 }
 
+/** One headline of a run's log, with the time its stream line was written (null for runs from before stamps). */
+export interface LogLine {
+  at: string | null;
+  text: string;
+}
+
 /**
  * The last headline messages of a run's log: tool calls, and the indented or list lines under a
  * message, are left out.
  */
-export function logTail(stream: string, lines: number): string[] {
-  return formatStream(stream)
-    .split("\n")
-    .map((line) => line.trimEnd())
-    .filter((line) => line.trim() && !/^→ /.test(line) && !/^(\s|[-*]\s|\d+\.\s)/.test(line))
-    .slice(-lines);
+export function logTail(stream: string, lines: number): LogLine[] {
+  const out: LogLine[] = [];
+  for (const raw of stream.split(/\r?\n/)) {
+    const at = /"_ts":"([^"]+)"\}\s*$/.exec(raw)?.[1] ?? null;
+    for (const line of formatStreamLine(raw)) {
+      const text = line.trimEnd();
+      if (!text.trim() || /^→ /.test(text) || /^(\s|[-*]\s|\d+\.\s)/.test(text)) continue;
+      out.push({ at, text });
+    }
+  }
+  return out.slice(-lines);
 }
 
 export type StageState = "done" | "active" | "pending" | "skipped";

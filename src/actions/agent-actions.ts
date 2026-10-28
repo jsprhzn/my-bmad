@@ -45,6 +45,7 @@ import {
 } from "@/lib/agents/autorunner-queue";
 import {
   logTail,
+  type LogLine,
   reachedStages,
   stagesOf,
   type StageView,
@@ -528,7 +529,9 @@ export interface AutorunnerStoryView {
   branch: string | null;
   startedAt: string;
   stages: StageView[];
-  logTail: string[];
+  /** Whether the story's run is still going: its last line is then the one in progress. */
+  running: boolean;
+  logTail: LogLine[];
 }
 
 export interface AutorunnerView extends Omit<AutorunnerState, "userId" | "localPath" | "runIds"> {
@@ -608,6 +611,7 @@ async function storyViewsOf(state: AutorunnerState, runs: AgentRun[]): Promise<A
           hasBrainstorm: Boolean(brainstorm),
           hasPlan: Boolean(plan),
         }),
+        running,
         logTail: logTail(stream, 3),
       };
     }),
