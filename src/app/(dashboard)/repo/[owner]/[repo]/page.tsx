@@ -12,6 +12,7 @@ import { DeleteRepoButton } from "@/components/shared/delete-repo-button";
 import { RefreshRepoButton } from "@/components/shared/refresh-repo-button";
 import { RepoSettingsModal } from "@/components/shared/repo-settings-modal";
 import { ProjectAccountSelect } from "@/components/agents/project-account-select";
+import { AgentSettingsDialog } from "@/components/agents/agent-settings-dialog";
 import { agentRunsEnabled } from "@/lib/agents/run-store";
 import { claudeAccounts } from "@/lib/agents/accounts";
 import {
@@ -72,8 +73,16 @@ export default async function RepoOverviewPage({ params }: RepoPageProps) {
               <ProjectAccountSelect
                 owner={owner}
                 name={repoName}
-                accounts={claudeAccounts().map((a) => a.name)}
+                accounts={claudeAccounts()}
                 current={repoConfig.agentAccount}
+              />
+            )}
+            {isLocal && agentRunsEnabled() && (
+              <AgentSettingsDialog
+                owner={owner}
+                name={repoName}
+                autorunner={repoConfig.agentAutorunner}
+                oneAtATime={repoConfig.agentOneAtATime}
               />
             )}
             {!isLocal && (

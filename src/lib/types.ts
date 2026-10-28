@@ -30,4 +30,8 @@ export interface RepoConfig {
   lastSyncedAt: Date | null;
   /** Claude account (AGENT_CLAUDE_ACCOUNTS name) this project's agent runs use; null = the first one. */
   agentAccount: string | null;
+  /** Agent runs of this project start in auto mode. */
+  agentAutorunner: boolean;
+  /** Agent runs of this project wait until the project's other running agents have finished. */
+  agentOneAtATime: boolean;
 }
