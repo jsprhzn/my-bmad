@@ -49,6 +49,8 @@ export interface AgentRun {
   error: string | null;
   /** The run this one answers; its log comes before this run's log. */
   parentRunId?: string | null;
+  /** Paused with SIGSTOP; resumed with SIGCONT. */
+  paused?: boolean;
 }
 
 /** Runs Claude Code headless; nobody is there to answer a permission prompt. */
@@ -473,6 +475,29 @@ async function logChain(id: string): Promise<string> {
   return [earlier, answer, own].filter(Boolean).join("\n\n");
 }
 
+/**
+ * Pause or resume a running run. The process group is stopped with SIGSTOP,
+ * so Claude keeps its place and carries on at SIGCONT.
+ */
+export async function setRunPaused(
+  id: string,
+  owner: { repoKey: string; userId: string },
+  paused: boolean,
+): Promise<AgentRun | null> {
+  const found = await getRun(id, owner);
+  if (!found) return null;
+  const { run } = found;
+  if (run.status !== "running" || !run.pid) return run;
+  try {
+    process.kill(-run.pid, paused ? "SIGSTOP" : "SIGCONT");
+  } catch {
+    // Already gone.
+  }
+  const updated: AgentRun = { ...run, paused };
+  await saveRun(updated);
+  return updated;
+}
+
 export async function stopRun(
   id: string,
   owner: { repoKey: string; userId: string },
@@ -483,6 +508,8 @@ export async function stopRun(
   if (run.status !== "running") return run;
   if (run.pid) {
     try {
+      // A paused process only takes SIGTERM once it runs again.
+      if (run.paused) process.kill(-run.pid, "SIGCONT");
       // Detached: the shell leads its own process group, Claude included.
       process.kill(-run.pid, "SIGTERM");
     } catch {
