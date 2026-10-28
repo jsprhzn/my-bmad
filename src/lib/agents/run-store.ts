@@ -65,6 +65,15 @@ export const DEFAULT_AGENT_COMMAND =
   "claude -p --model {model} --permission-mode {permission_mode} --output-format stream-json --verbose";
 
 /**
+ * The agent command for the steps after a run: finishing its commits and resolving conflicts. Both
+ * placeholders must be filled in; an unfilled "{permission_mode}" makes Claude refuse to start, so
+ * the merge then fails with a dirty or conflicted worktree.
+ */
+export function resolveAgentCommand(template: string, model: ModelTier, permissionMode: AgentPermissionMode): string {
+  return template.replaceAll("{model}", model).replaceAll("{permission_mode}", permissionMode);
+}
+
+/**
  * Adds the time each stream-json line was written as "_ts" (UTC, to the millisecond), so the log can show
  * when it happened. Lines that are not JSON objects pass through unchanged.
  */
@@ -425,7 +434,7 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
         // A plan only writes the spec: the sprint status it sets stays as the plan left it.
         setStatus: input.kind !== "plan",
         // Resolves conflicts with the same account and model as the build, without resuming its session.
-        resolveCommand: template.replaceAll("{model}", input.model),
+        resolveCommand: resolveAgentCommand(template, input.model, input.permissionMode),
         conflictPromptFile,
         finishPromptFile,
         conflictLog: runFile(id, "conflict.log"),
