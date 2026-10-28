@@ -27,6 +27,14 @@ export interface QueueStory {
 
 /** Stories the queue may start: not begun yet. */
 const OPEN = new Set(["backlog", "ready-for-dev"]);
+/** A story a failed or stopped run left in progress: picked up again, unless a run is still on it. */
+const LEFT_BEHIND = new Set(["in-progress"]);
+
+/** Whether the queue may start this story: it is open, or a run left it in progress. */
+export function canStart(status: string): boolean {
+  return OPEN.has(status) || LEFT_BEHIND.has(status);
+}
+
 export const MAX_PARALLEL = 3;
 /** A story that keeps hitting the token limit is given up after this many tries. */
 export const MAX_ATTEMPTS = 6;
@@ -68,7 +76,7 @@ export function nextStories(input: {
   const picked: QueueStory[] = [];
   for (const story of input.stories) {
     if (picked.length >= input.slots) break;
-    if (!OPEN.has(story.status) || input.busy.has(story.number)) continue;
+    if (!canStart(story.status) || input.busy.has(story.number)) continue;
     const needs = requiredStories(story.number, input.graph);
     // A need that is missing from sprint-status counts as not done: never start blind.
     if ([...needs].some((need) => statusOf.get(need) !== "done")) continue;
