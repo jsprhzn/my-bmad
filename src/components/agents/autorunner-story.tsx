@@ -200,7 +200,7 @@ export function AutorunnerStoryRow({
       <RunChangesSheet
         owner={owner}
         repo={repo}
-        runId={story.runId}
+        runId={story.changesRunId}
         storyNumber={story.number}
         title={`${story.number} · ${story.title}`}
         open={changesOpen}
