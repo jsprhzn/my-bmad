@@ -99,6 +99,7 @@ export function AgentRunsList({ owner, repo }: { owner: string; repo: string }) 
         owner={owner}
         repo={repo}
         runId={changesRun?.id ?? null}
+        storyNumber={changesRun?.storyId}
         title={changesRun ? `${changesRun.storyId}: ${changesRun.storyTitle}` : ""}
         open={changesRun !== null}
         onOpenChange={(open) => !open && setChangesRun(null)}
@@ -155,7 +156,7 @@ export function AgentRunsList({ owner, repo }: { owner: string; repo: string }) 
                       </span>
                       {run.costUsd !== null && <span>· ${run.costUsd.toFixed(2)}</span>}
                       {run.branch && (
-                        <span className="inline-flex min-w-0 items-center gap-1 font-mono">
+                        <span className="inline-flex min-w-0 items-center gap-1 font-mono text-primary">
                           · <GitBranch className="size-3 shrink-0" aria-hidden="true" />
                           <span className="truncate">{run.branch}</span>
                         </span>

@@ -2,6 +2,7 @@
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
@@ -403,6 +404,44 @@ export async function getAgentRunChanges(
         running: run.status === "running",
       },
     };
+  } catch (error) {
+    return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
+  }
+}
+
+const IMPLEMENTATION_DIR = "_bmad-output/implementation-artifacts";
+
+/**
+ * The markdown artifacts of one story in the project's implementation folder:
+ * its spec and its build result. Story "11.1" has the files "spec-11-1-…".
+ */
+export async function getStoryArtifacts(input: {
+  owner: string;
+  name: string;
+  storyNumber: string;
+}): Promise<ActionResult<string[]>> {
+  const parsed = z
+    .object({
+      owner: z.string().min(1),
+      name: z.string().min(1),
+      storyNumber: z.string().regex(/^\d+[.\da-z]*$/),
+    })
+    .safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
+  }
+  const access = await requireAgentProject(parsed.data.owner, parsed.data.name);
+  if (!access.success) return access;
+  const key = parsed.data.storyNumber.replace(/\./g, "-");
+  const prefixes = [`spec-${key}-`, `bmad-build-auto-result-${key}-`];
+  try {
+    const dir = path.join(access.data.localPath, IMPLEMENTATION_DIR);
+    const names = existsSync(dir) ? await readdir(dir) : [];
+    const files = names
+      .filter((name) => name.endsWith(".md") && prefixes.some((prefix) => name.startsWith(prefix)))
+      .sort()
+      .map((name) => `${IMPLEMENTATION_DIR}/${name}`);
+    return { success: true, data: files };
   } catch (error) {
     return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
   }
