@@ -51,7 +51,7 @@ const STATUS_LABELS: Record<AutorunnerView["status"], string> = {
 function RunnerHistory({ views }: { views: AutorunnerView[] }) {
   return (
     <div className="space-y-1 text-sm">
-      <p className="font-medium">Eerdere autorunners</p>
+      <p className="font-medium">Laatst autorun</p>
       <ul className="space-y-1 text-muted-foreground">
         {views.map((view) => {
           const duration = Date.parse(view.endedAt ?? view.startedAt) - Date.parse(view.startedAt);
@@ -127,7 +127,7 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
   };
 
   const current = views.find((v) => v.status === "running") ?? null;
-  const finished = views.filter((v) => v.status !== "running").slice(0, 4);
+  const finished = views.filter((v) => v.status !== "running").slice(0, 1);
 
   const start = async () => {
     setPending(true);
