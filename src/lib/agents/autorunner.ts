@@ -25,6 +25,7 @@ import { buildAgentPrompt } from "./prompts";
 import { listProjectSkills } from "./project-skills";
 import { recommendedModel, type AgentRunKind } from "./models";
 import { listRuns, startRun } from "./run-store";
+import { allowanceFor, quotaLoad, readQuota } from "./quota";
 
 const TICK_MS = 15_000;
 const IMPLEMENTATION = "_bmad-output/implementation-artifacts";
@@ -113,7 +114,11 @@ export async function runAutorunner(file: string): Promise<void> {
 
     // 2. Start what the slots allow: retries that are due first, then new stories.
     const stopping = state.stopRequested || failure !== null;
-    const slots = (state.mode === "serial" ? 1 : MAX_PARALLEL) - active.length;
+    // The plan's limit decides how many runs may be in flight.
+    const load = quotaLoad(await readQuota(account?.configDir));
+    const allowance = allowanceFor(load, state.mode === "serial" ? 1 : MAX_PARALLEL);
+    const throttled = !stopping && allowance === 0;
+    const slots = allowance - active.length;
     const busy = new Set<string>([
       ...active.map((a) => a.number),
       ...waiting.map((w) => w.number),
@@ -147,7 +152,7 @@ export async function runAutorunner(file: string): Promise<void> {
     const openLeft = project.stories.filter((s) => s.status === "backlog" || s.status === "ready-for-dev");
     const nextWait = Math.min(...pending.map((w) => Date.parse(w.at)));
 
-    if (active.length === 0 && (stopping || pending.length === 0)) {
+    if (active.length === 0 && (stopping || pending.length === 0) && !(throttled && openLeft.length > 0)) {
       const status = failed ? "failed" : "stopped";
       await finish(file, {
         status: failed || state.stopRequested || openLeft.length > 0 ? status : "completed",
@@ -176,6 +181,9 @@ export async function runAutorunner(file: string): Promise<void> {
       runIds: [...state.runIds, ...started],
       note:
         failNote ??
+        (throttled
+          ? `Token-budget vol (${Math.round((load ?? 1) * 100)}%); wacht tot er weer ruimte is.`
+          : null) ??
         (pending.length > 0 && active.length === 0
           ? `Wacht op de token-limiet; verder om ${new Date(nextWait).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}.`
           : null),

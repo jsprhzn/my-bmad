@@ -21,7 +21,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatDuration, formatTime } from "@/lib/agents/format";
+import type { Quota, QuotaWindow } from "@/lib/agents/quota";
 import {
+  getAgentUsage,
   listAutorunnerViews,
   startAutorunner,
   stopAutorunner,
@@ -63,6 +65,22 @@ function RunnerHistory({ views }: { views: AutorunnerView[] }) {
   );
 }
 
+/** The plan limit as Claude Code reports it: the session and the week, with when each resets. */
+function QuotaLine({ quota }: { quota: Quota }) {
+  const window = (label: string, w: QuotaWindow | null) =>
+    w && (
+      <span>
+        {label}: {w.usedPercent}% gebruikt · reset {w.resets}
+      </span>
+    );
+  return (
+    <p className="flex flex-wrap gap-x-4 text-xs text-muted-foreground">
+      {window("Sessie", quota.session)}
+      {window("Week", quota.week)}
+    </p>
+  );
+}
+
 /**
  * Start, follow and stop the autorunner for a project: it takes open stories
  * from the backlog and runs them in auto mode. Shown above the stories board
@@ -70,6 +88,7 @@ function RunnerHistory({ views }: { views: AutorunnerView[] }) {
  */
 export function AutorunnerControl({ owner, repo }: { owner: string; repo: string }) {
   const [views, setViews] = useState<AutorunnerView[]>([]);
+  const [quota, setQuota] = useState<Quota | null>(null);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<AutorunnerView["mode"]>("serial");
   const [review, setReview] = useState(true);
@@ -83,6 +102,8 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
       if (alive && result.success) {
         setViews(result.data);
       }
+      const tokens = await getAgentUsage({ owner, name: repo });
+      if (alive && tokens.success) setQuota(tokens.data);
     };
     void poll();
     const timer = setInterval(() => void poll(), POLL_MS);
@@ -125,6 +146,7 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
 
   return (
     <div className="space-y-2">
+      {quota && <QuotaLine quota={quota} />}
       {current ? (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm">
           <Loader2 className="size-4 animate-spin text-muted-foreground" />
