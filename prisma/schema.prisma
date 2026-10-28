@@ -14,18 +14,18 @@ enum UserRole {
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            String   @id @default(cuid())
   name          String?
-  email         String    @unique
-  emailVerified Boolean   @default(false)
+  email         String   @unique
+  emailVerified Boolean  @default(false)
   image         String?
-  role          UserRole  @default(user)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  role          UserRole @default(user)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  sessions      Session[]
-  accounts      Account[]
-  repos         Repo[]
+  sessions Session[]
+  accounts Account[]
+  repos    Repo[]
 
   @@map("users")
 }
@@ -77,21 +77,29 @@ model Verification {
 }
 
 model Repo {
-  id            String    @id @default(cuid())
-  owner         String
-  name          String
-  branch        String    @default("main")
-  displayName   String
-  description   String?
-  sourceType    String    @default("github")
-  localPath     String?
-  agentAccount  String?
-  totalFiles    Int?
-  lastSyncedAt  DateTime?
-  userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  owner           String
+  name            String
+  branch          String    @default("main")
+  displayName     String
+  description     String?
+  sourceType      String    @default("github")
+  localPath       String?
+  agentAccount    String?
+  /**
+   * Agent runs of this project start in auto mode.
+   */
+  agentAutorunner Boolean   @default(false)
+  /**
+   * Agent runs of this project wait until the project's other running agents have finished.
+   */
+  agentOneAtATime Boolean   @default(false)
+  totalFiles      Int?
+  lastSyncedAt    DateTime?
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@unique([userId, owner, name])
   @@index([userId])

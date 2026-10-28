@@ -146,6 +146,12 @@ export async function startAgentRun(
     const model =
       (parsed.data.model as AgentRun["model"] | undefined) ??
       recommendedModel(kind, story.modelAdvice);
+    // One at a time waits for every agent of the project that is running now, not only this story's.
+    const waitForPids = repo?.agentOneAtATime
+      ? (await listRuns({ repoKey, userId }))
+          .filter((r) => r.status === "running" && r.pid)
+          .map((r) => r.pid as number)
+      : [];
     const run = await startRun({
       repoKey,
       userId,
@@ -156,6 +162,8 @@ export async function startAgentRun(
       skill,
       model,
       account,
+      permissionMode: repo?.agentAutorunner ? "auto" : "bypassPermissions",
+      waitForPids,
       prompt: buildAgentPrompt({
         kind,
         skill,
@@ -222,10 +230,38 @@ export async function setProjectAgentAccount(
   }
 }
 
-/** Stories with a run that is still running, so the overview can show them as active. */
+const agentSettingsSchema = repoSchema.extend({
+  autorunner: z.boolean(),
+  oneAtATime: z.boolean(),
+});
+
+/** Save the project's agent settings: auto mode for its runs, and whether they wait for each other. */
+export async function setProjectAgentSettings(
+  input: z.infer<typeof agentSettingsSchema>,
+): Promise<ActionResult<{ autorunner: boolean; oneAtATime: boolean }>> {
+  const parsed = agentSettingsSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
+  }
+  const access = await requireAgentProject(parsed.data.owner, parsed.data.name);
+  if (!access.success) return access;
+  const { autorunner, oneAtATime } = parsed.data;
+  try {
+    await prisma.repo.updateMany({
+      where: { userId: access.data.userId, owner: parsed.data.owner, name: parsed.data.name },
+      data: { agentAutorunner: autorunner, agentOneAtATime: oneAtATime },
+    });
+    revalidatePath(`/repo/${parsed.data.owner}/${parsed.data.name}`);
+    return { success: true, data: { autorunner, oneAtATime } };
+  } catch (error) {
+    return { success: false, error: sanitizeError(error, "DB_ERROR"), code: "DB_ERROR" };
+  }
+}
+
+/** Stories with a run that is still running, with the run to open for each, so the overview can show them as active. */
 export async function listRunningStoryIds(
   input: z.infer<typeof repoSchema>,
-): Promise<ActionResult<string[]>> {
+): Promise<ActionResult<{ storyId: string; runId: string }[]>> {
   const parsed = repoSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
@@ -234,8 +270,67 @@ export async function listRunningStoryIds(
   if (!access.success) return access;
   try {
     const runs = await listRuns({ repoKey: access.data.repoKey, userId: access.data.userId });
-    const ids = [...new Set(runs.filter((r) => r.status === "running").map((r) => r.storyId))];
-    return { success: true, data: ids };
+    const byStory = new Map<string, string>();
+    for (const run of runs) {
+      if (run.status === "running" && !byStory.has(run.storyId)) {
+        byStory.set(run.storyId, run.id);
+      }
+    }
+    const data = [...byStory].map(([storyId, runId]) => ({ storyId, runId }));
+    return { success: true, data };
+  } catch (error) {
+    return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
+  }
+}
+
+const replySchema = runSchema.extend({
+  answer: z.string().trim().min(1).max(4000),
+});
+
+/** Answer a finished run: a new run that resumes the same Claude session with the answer. */
+export async function replyAgentRun(
+  input: z.infer<typeof replySchema>,
+): Promise<ActionResult<AgentRun>> {
+  const parsed = replySchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
+  }
+  const access = await requireAgentProject(parsed.data.owner, parsed.data.name);
+  if (!access.success) return access;
+  try {
+    const found = await getRun(parsed.data.runId, access.data);
+    if (!found) return { success: false, error: "Run not found", code: "NOT_FOUND" };
+    const { run, sessionId } = found;
+    if (run.status === "running") {
+      return {
+        success: false,
+        error: "Wait until the run has finished before answering.",
+        code: "ALREADY_RUNNING",
+      };
+    }
+    if (!sessionId) {
+      return { success: false, error: "This run has no session to answer in.", code: "NO_SESSION" };
+    }
+    const account = findClaudeAccount(run.account ?? undefined) ?? null;
+    if (run.account && !account) {
+      return { success: false, error: "Unknown Claude account", code: "VALIDATION_ERROR" };
+    }
+    const reply = await startRun({
+      repoKey: access.data.repoKey,
+      userId: access.data.userId,
+      localPath: access.data.localPath,
+      storyId: run.storyId,
+      storyTitle: run.storyTitle,
+      kind: run.kind,
+      skill: run.skill,
+      model: run.model,
+      account,
+      permissionMode: run.permissionMode ?? "bypassPermissions",
+      prompt: parsed.data.answer,
+      resumeSessionId: sessionId,
+      parentRunId: run.id,
+    });
+    return { success: true, data: reply };
   } catch (error) {
     return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
   }
@@ -243,7 +338,7 @@ export async function listRunningStoryIds(
 
 export async function getAgentRun(
   input: z.infer<typeof runSchema>,
-): Promise<ActionResult<{ run: AgentRun; log: string; prompt: string }>> {
+): Promise<ActionResult<{ run: AgentRun; log: string; prompt: string; sessionId: string | null }>> {
   const parsed = runSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };

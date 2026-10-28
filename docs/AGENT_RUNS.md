@@ -43,6 +43,25 @@ The card offers what fits the story's status: Plan and Start dev in Backlog, Sta
 
 A run is a detached `claude -p` process in the project folder. Its record, prompt and output are files in `.agent-runs/` (or `AGENT_RUNS_DIR`), so runs survive a restart of MyBMAD. The run page shows the log while it runs, the cost and turns when it ends, and a **Stop** button.
 
+### Story status and merging
+
+A **Start dev** run first sets its story to `in-progress` in the checkout's `sprint-status.yaml` and commits only that file, so the status shows while the build runs. A file you are editing by hand is left alone.
+
+A dev run works in its own git worktree and branch. When it finishes, its commits are rebased onto the checkout's branch and fast-forwarded in, one merge at a time. Sprint-status is then set to `review`, `done` or `blocked` on the story branch.
+
+When that rebase hits a conflict, an agent resolves it in the worktree, with the same account and model as the build. It gets up to three tries to finish the rebase. If the conflicts remain, the rebase is aborted and nothing is merged; the run then shows the reason. The resolver's output is saved as `<run-id>.conflict.log` next to the run's other files. Nothing runs the project's tests after a conflict is resolved.
+
+## Auto mode and parallel runs
+
+The project page has an **Agent-instellingen** button with two options, both off by default. They apply to every run of the project until you change them:
+
+- **Autorunner** starts runs with `--permission-mode auto`: Claude Code decides per action. Off, runs use `bypassPermissions`, as before.
+- **Een tegelijk** holds a run back until the project's other running agents have finished. Off, runs start at once, so runs of different stories go in parallel. Each new build still gets its own worktree.
+
+A run waiting for others shows as running. A run started in auto mode shows "· auto mode" in its list entry.
+
+`AGENT_COMMAND_TEMPLATE` takes `{permission_mode}` where the mode goes. A template with a fixed `--permission-mode` ignores the choice.
+
 ## Security
 
-Agents run headless with `--permission-mode bypassPermissions`: they can run any command and change any file the MyBMAD server user can. Only the owner of a project can start runs for it. Set `AGENT_COMMAND_TEMPLATE` for a stricter command, for example with `--allowedTools`.
+Agents run headless. With the default mode, they run with `--permission-mode bypassPermissions`: they can run any command and change any file the MyBMAD server user can. Only the owner of a project can start runs for it. Set `AGENT_COMMAND_TEMPLATE` for a stricter command, for example with `--allowedTools`.

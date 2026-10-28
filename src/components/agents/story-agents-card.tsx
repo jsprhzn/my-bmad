@@ -316,6 +316,19 @@ export function StoryAgentsCard({
               </p>
             )}
 
+            {runs[0]?.status === "failed" && (
+              <p className="text-sm text-destructive" role="status">
+                The last job failed: {AGENT_RUN_LABELS[runs[0].kind]} ·{" "}
+                {new Date(runs[0].startedAt).toLocaleString()}.{" "}
+                <Link
+                  href={`/repo/${owner}/${repo}/runs/${runs[0].id}`}
+                  className="font-medium underline"
+                >
+                  View log
+                </Link>
+              </p>
+            )}
+
             {runs.length > 0 ? (
               <ul className="space-y-2">
                 {runs.map((run) => (
@@ -328,6 +341,7 @@ export function StoryAgentsCard({
                       {AGENT_RUN_LABELS[run.kind]}
                       {run.skill && ` · /${run.skill}`} · {run.model}
                       {run.account && accounts.length > 1 && ` · ${run.account}`}
+                      {run.permissionMode === "auto" && " · auto mode"}
                     </Link>
                     <span className="text-muted-foreground">
                       {new Date(run.startedAt).toLocaleString()}
