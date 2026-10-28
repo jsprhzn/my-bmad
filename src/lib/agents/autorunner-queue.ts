@@ -5,6 +5,7 @@ import yaml from "js-yaml";
 import { requiredStories, type StoryGraph } from "../bmad/story-graph";
 import { storyNumber } from "../bmad/story-number";
 import { runsDir } from "./run-store";
+import type { PlannedModels } from "./run-stages";
 
 /**
  * The autorunner: a queue that takes open stories from the project one by
@@ -109,6 +110,8 @@ export interface ActiveStory {
   number: string;
   phase: Phase;
   runId: string;
+  /** The models planned for the story's actions, shown before their run starts. */
+  models?: PlannedModels;
 }
 
 export interface WaitingStory {
@@ -142,6 +145,8 @@ export interface AutorunnerState {
   active: ActiveStory[];
   waiting: WaitingStory[];
   done: string[];
+  /** Stories stopped by hand from the queue: not taken up again. */
+  skipped: string[];
   /** Every run the queue started, in order: its tokens and cost are summed from these. */
   runIds: string[];
   /** Why the queue is waiting, stopped or failed, for the UI. */
@@ -162,7 +167,7 @@ export async function readAutorunner(file: string): Promise<AutorunnerState | nu
   try {
     const state = JSON.parse(await readFile(file, "utf8")) as AutorunnerState;
     // Queues started before run ids were kept have none.
-    return { ...state, runIds: state.runIds ?? [] };
+    return { ...state, runIds: state.runIds ?? [], skipped: state.skipped ?? [] };
   } catch {
     return null;
   }
