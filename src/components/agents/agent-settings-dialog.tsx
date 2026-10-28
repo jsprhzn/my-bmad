@@ -63,14 +63,14 @@ export function AgentSettingsDialog({ owner, name, autorunner, oneAtATime }: Age
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Bot className="size-4" />
-          Agent-instellingen…
+          Agent settings…
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Agent-instellingen</DialogTitle>
+          <DialogTitle>Agent settings</DialogTitle>
           <DialogDescription>
-            Gelden voor alle agent runs van dit project. Ze blijven staan tot je ze verandert.
+            Apply to all agent runs of this project. They stay until you change them.
           </DialogDescription>
         </DialogHeader>
 
@@ -98,9 +98,9 @@ export function AgentSettingsDialog({ owner, name, autorunner, oneAtATime }: Age
               disabled={saving}
             />
             <span>
-              <span className="font-medium">Een tegelijk</span>
+              <span className="font-medium">One at a time</span>
               <span className="block text-muted-foreground">
-                Een run wacht tot de andere agents van dit project klaar zijn. Uit: runs draaien parallel.
+                A run waits until the other agents of this project are done. Off: runs run in parallel.
               </span>
             </span>
           </label>
@@ -114,11 +114,11 @@ export function AgentSettingsDialog({ owner, name, autorunner, oneAtATime }: Age
 
         <DialogFooter>
           <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={saving}>
-            Annuleren
+            Cancel
           </Button>
           <Button onClick={() => void save()} disabled={saving}>
             {saving && <Loader2 className="animate-spin" />}
-            Opslaan
+            Save
           </Button>
         </DialogFooter>
       </DialogContent>

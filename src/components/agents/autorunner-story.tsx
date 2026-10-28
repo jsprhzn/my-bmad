@@ -65,7 +65,7 @@ function StageTrack({ stages, paused }: { stages: StageView[]; paused: boolean }
             <span className={cn("h-1.5 min-w-0 flex-1 rounded-full", barClass(stage, paused))} />
           </span>
           <span className={cn("truncate text-xs", labelClass(stage))}>
-            {stage.state === "skipped" ? `${stage.label} · niet gedaan` : stage.label}
+            {stage.state === "skipped" ? `${stage.label} · skipped` : stage.label}
           </span>
         </div>
       ))}
@@ -90,7 +90,7 @@ export function AutorunnerStoryRow({
   const [changesOpen, setChangesOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const active = story.stages.find((s) => s.state === "active");
-  const phaseLabel = active?.label ?? "Wacht";
+  const phaseLabel = active?.label ?? "Waiting";
 
   const act = async (run: () => Promise<{ success: boolean; error?: string }>) => {
     setPending(true);
@@ -100,7 +100,7 @@ export function AutorunnerStoryRow({
     if (result.success) {
       await onChanged();
     } else {
-      setError(result.error ?? "Actie mislukt");
+      setError(result.error ?? "Action failed");
     }
   };
 
@@ -159,7 +159,7 @@ export function AutorunnerStoryRow({
             })}
           </ul>
         ) : (
-          "Nog geen uitvoer."
+          "No output yet."
         )}
       </div>
 
@@ -184,7 +184,7 @@ export function AutorunnerStoryRow({
               )
             }
           >
-            {story.paused ? "Hervatten" : "Pauzeren"}
+            {story.paused ? "Resume" : "Pause"}
           </Button>
           <Button
             variant="outline"
@@ -192,7 +192,7 @@ export function AutorunnerStoryRow({
             disabled={pending}
             onClick={() => void act(() => stopAgentRun({ owner, name: repo, runId: story.runId }))}
           >
-            Stoppen
+            Stop
           </Button>
         </div>
       </div>

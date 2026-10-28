@@ -3,8 +3,6 @@ import { getCachedBmadProject } from "@/lib/bmad/cached-project";
 import { getGitHubToken } from "@/lib/github/client";
 import { StoriesView } from "@/components/stories/stories-view";
 import { RefreshRepoButton } from "@/components/shared/refresh-repo-button";
-import { AutorunnerControl } from "@/components/agents/autorunner-control";
-import { agentRunsEnabled } from "@/lib/agents/run-store";
 import {
   getAuthenticatedUserId,
   getAuthenticatedRepoConfig,
@@ -39,7 +37,6 @@ export default async function StoriesPage({ params }: StoriesPageProps) {
           epics
         </p>
       </div>
-      {isLocal && agentRunsEnabled() && <AutorunnerControl owner={owner} repo={repoName} />}
       <StoriesView stories={project.stories} epics={project.epics} />
     </div>
   );

@@ -47,7 +47,7 @@ export default async function DocumentatiePage({ params }: DocumentatiePageProps
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Documentatie</h1>
         <p className="text-muted-foreground mt-1">
-          Index van alle specs, per epic
+          Index of all specs, per epic
         </p>
       </div>
       {page?.success ? (

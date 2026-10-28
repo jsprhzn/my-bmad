@@ -47,7 +47,7 @@ export function RunLogDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] max-w-[95vw] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
-          <DialogTitle>Volledige log</DialogTitle>
+          <DialogTitle>Full log</DialogTitle>
           <DialogDescription className="truncate">{title}</DialogDescription>
         </DialogHeader>
         {error ? (
@@ -57,7 +57,7 @@ export function RunLogDialog({
         ) : log === null ? (
           <p className="text-sm text-muted-foreground">Laden…</p>
         ) : (
-          <RunLog log={log} emptyText="Geen uitvoer." />
+          <RunLog log={log} emptyText="No output." />
         )}
       </DialogContent>
     </Dialog>
