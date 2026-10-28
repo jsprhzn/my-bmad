@@ -119,32 +119,33 @@ type StoryRow = StoryDetail & { subRows?: StoryRow[] };
 const SUBTASK_ID = /^(\d+\.\d+)[a-z]$/;
 
 /**
- * Nest the subtasks of split stories under their parent row, and count how many of them are done.
+ * Nest the subtasks of a story under its row (4.1 → 4.1a, 4.1b, …), and count how many of them are done.
  * A subtask whose parent is not in the list shows as a row of its own.
  */
 function buildRows(stories: StoryDetail[], lookup: StoryDetail[]) {
+  // Every story that has subtasks, across the whole list, so the done count does not depend on filters.
   const progress = new Map<string, { done: number; total: number }>();
   for (const story of lookup) {
     const parent = SUBTASK_ID.exec(story.id)?.[1];
-    if (!parent || !lookup.some((s) => s.id === parent && s.status === "split")) continue;
+    if (!parent) continue;
     const count = progress.get(parent) ?? { done: 0, total: 0 };
     count.total += 1;
     if (story.status === "done") count.done += 1;
     progress.set(parent, count);
   }
 
-  const splitIds = new Set(stories.filter((s) => s.status === "split").map((s) => s.id));
+  const storyIds = new Set(stories.map((s) => s.id));
   const children = new Map<string, StoryRow[]>();
   for (const story of stories) {
     const parent = SUBTASK_ID.exec(story.id)?.[1];
-    if (!parent || !splitIds.has(parent)) continue;
+    if (!parent || !storyIds.has(parent)) continue;
     children.set(parent, [...(children.get(parent) ?? []), story]);
   }
 
   const rows: StoryRow[] = stories
     .filter((story) => {
       const parent = SUBTASK_ID.exec(story.id)?.[1];
-      return !(parent && splitIds.has(parent));
+      return !(parent && storyIds.has(parent));
     })
     .map((story) => ({ ...story, subRows: children.get(story.id) }));
   return { rows, progress };
