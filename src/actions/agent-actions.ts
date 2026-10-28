@@ -1,6 +1,9 @@
 "use server";
 
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db/client";
@@ -23,11 +26,19 @@ import { listProjectSkills } from "@/lib/agents/project-skills";
 import {
   agentRunsEnabled,
   getRun,
+  isAlive,
   listRuns,
   startRun,
   stopRun,
   type AgentRun,
 } from "@/lib/agents/run-store";
+import {
+  autorunnerFile,
+  listAutorunners,
+  readAutorunner,
+  writeAutorunner,
+  type AutorunnerState,
+} from "@/lib/agents/autorunner-queue";
 import type { ActionResult } from "@/lib/types";
 
 const repoSchema = z.object({
@@ -367,6 +378,123 @@ export async function stopAgentRun(
     const run = await stopRun(parsed.data.runId, access.data);
     if (!run) return { success: false, error: "Run not found", code: "NOT_FOUND" };
     return { success: true, data: run };
+  } catch (error) {
+    return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
+  }
+}
+
+const autorunnerStartSchema = repoSchema.extend({
+  mode: z.enum(["serial", "parallel"]),
+  review: z.boolean(),
+});
+
+/** The queue's state as the page shows it: whether its driver is still alive. */
+export interface AutorunnerView extends Omit<AutorunnerState, "userId" | "localPath"> {
+  driverAlive: boolean;
+}
+
+function viewOf(state: AutorunnerState): AutorunnerView {
+  const view: Partial<AutorunnerState> = { ...state };
+  delete view.userId;
+  delete view.localPath;
+  return {
+    ...(view as Omit<AutorunnerState, "userId" | "localPath">),
+    driverAlive: isAlive(state.driverPid),
+  };
+}
+
+/** Start the autorunner for the project: it takes open stories one by one, or a few at once, in auto mode. */
+export async function startAutorunner(
+  input: z.infer<typeof autorunnerStartSchema>,
+): Promise<ActionResult<AutorunnerView>> {
+  const parsed = autorunnerStartSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
+  }
+  const access = await requireAgentProject(parsed.data.owner, parsed.data.name);
+  if (!access.success) return access;
+  const { userId, repoKey, localPath } = access.data;
+  try {
+    const existing = await listAutorunners(repoKey, userId);
+    if (existing.some((s) => s.status === "running")) {
+      return { success: false, error: "The autorunner is already running.", code: "ALREADY_RUNNING" };
+    }
+    const repo = await getAuthenticatedRepoConfig(userId, parsed.data.owner, parsed.data.name);
+    const id = `${Date.now()}-${randomBytes(4).toString("hex")}`;
+    const file = autorunnerFile(id);
+    const state: AutorunnerState = {
+      id,
+      repoKey,
+      userId,
+      localPath,
+      account: repo?.agentAccount ?? null,
+      mode: parsed.data.mode,
+      review: parsed.data.review,
+      status: "running",
+      stopRequested: false,
+      failed: false,
+      driverPid: null,
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      active: [],
+      waiting: [],
+      done: [],
+      note: null,
+    };
+    await writeAutorunner(file, state);
+    // Detached, so it keeps running when this request ends or MyBMAD restarts.
+    const child = spawn(
+      path.join(process.cwd(), "node_modules", ".bin", "tsx"),
+      [path.join(process.cwd(), "scripts", "autorunner.ts"), file],
+      { cwd: process.cwd(), detached: true, stdio: "ignore", env: process.env },
+    );
+    child.unref();
+    const started = { ...state, driverPid: child.pid ?? null };
+    await writeAutorunner(file, started);
+    revalidatePath(`/repo/${parsed.data.owner}/${parsed.data.name}`);
+    return { success: true, data: viewOf(started) };
+  } catch (error) {
+    return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
+  }
+}
+
+/** Ask the autorunner to stop: stories already running finish, no new one starts. */
+export async function stopAutorunner(
+  input: z.infer<typeof repoSchema> & { id: string },
+): Promise<ActionResult<AutorunnerView>> {
+  const parsed = repoSchema.extend({ id: z.string().regex(/^\d{13}-[0-9a-f]{8}$/) }).safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
+  }
+  const access = await requireAgentProject(parsed.data.owner, parsed.data.name);
+  if (!access.success) return access;
+  try {
+    const file = autorunnerFile(parsed.data.id);
+    const state = await readAutorunner(file);
+    if (!state || state.repoKey !== access.data.repoKey || state.userId !== access.data.userId) {
+      return { success: false, error: "Autorunner not found", code: "NOT_FOUND" };
+    }
+    const updated = { ...state, stopRequested: true };
+    await writeAutorunner(file, updated);
+    return { success: true, data: viewOf(updated) };
+  } catch (error) {
+    return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
+  }
+}
+
+/** The project's autorunner queues, newest first. */
+export async function listAutorunnerViews(
+  input: z.infer<typeof repoSchema>,
+): Promise<ActionResult<AutorunnerView[]>> {
+  const parsed = repoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
+  }
+  const access = await requireAgentProject(parsed.data.owner, parsed.data.name);
+  if (!access.success) return access;
+  try {
+    const states = await listAutorunners(access.data.repoKey, access.data.userId);
+    return { success: true, data: states.slice(0, 5).map(viewOf) };
   } catch (error) {
     return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
   }

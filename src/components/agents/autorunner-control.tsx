@@ -1,0 +1,213 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Bot, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  listAutorunnerViews,
+  startAutorunner,
+  stopAutorunner,
+  type AutorunnerView,
+} from "@/actions/agent-actions";
+
+/** Reload the queue this often while the page is open. */
+const POLL_MS = 10000;
+
+const MODE_LABELS: Record<AutorunnerView["mode"], string> = {
+  serial: "Een voor een",
+  parallel: "Parallel (max 3)",
+};
+
+/**
+ * Start, follow and stop the autorunner for a project: it takes open stories
+ * from the backlog and runs them in auto mode. Shown above the stories board
+ * and above the agent runs.
+ */
+export function AutorunnerControl({ owner, repo }: { owner: string; repo: string }) {
+  const [views, setViews] = useState<AutorunnerView[]>([]);
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<AutorunnerView["mode"]>("serial");
+  const [review, setReview] = useState(true);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      const result = await listAutorunnerViews({ owner, name: repo });
+      if (alive && result.success) setViews(result.data);
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [owner, repo]);
+
+  const reload = async () => {
+    const result = await listAutorunnerViews({ owner, name: repo });
+    if (result.success) setViews(result.data);
+  };
+
+  const current = views.find((v) => v.status === "running") ?? null;
+  const last = views.find((v) => v.status !== "running") ?? null;
+
+  const start = async () => {
+    setPending(true);
+    setError(null);
+    const result = await startAutorunner({ owner, name: repo, mode, review });
+    setPending(false);
+    if (result.success) {
+      setOpen(false);
+      await reload();
+    } else {
+      setError(result.error);
+    }
+  };
+
+  const stop = async (id: string) => {
+    setError(null);
+    const result = await stopAutorunner({ owner, name: repo, id });
+    if (result.success) {
+      await reload();
+    } else {
+      setError(result.error);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      {current ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm">
+          <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <p className="font-medium">
+              Autorunner draait · {MODE_LABELS[current.mode]}
+              {current.review ? " · met review" : ""}
+            </p>
+            <p className="text-muted-foreground">
+              {current.done.length} klaar
+              {current.active.length > 0 &&
+                ` · bezig: ${current.active.map((a) => `${a.key} (${a.phase === "build" ? "bouwen" : "review"})`).join(", ")}`}
+              {current.waiting.length > 0 && ` · wacht op token-limiet`}
+              {!current.driverAlive && " · de runner lijkt te zijn onderbroken"}
+            </p>
+            {current.note && <p className="text-muted-foreground">{current.note}</p>}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void stop(current.id)}
+            disabled={current.stopRequested}
+          >
+            {current.stopRequested ? "Stoppen…" : "Stop autorunner"}
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <Dialog open={open} onOpenChange={(next) => !pending && setOpen(next)}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Bot className="size-4" />
+                Autorunner starten
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Autorunner starten</DialogTitle>
+                <DialogDescription>
+                  De runner pakt zelf de volgende story uit de backlog waarvan de afhankelijkheden klaar
+                  zijn, en werkt die af in auto mode. Bij een fout stopt hij; bij een token-limiet wacht
+                  hij tot die weer beschikbaar is en probeert het opnieuw.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 text-sm">
+                <div className="space-y-1.5">
+                  <span className="font-medium">Volgorde</span>
+                  <Select
+                    value={mode}
+                    onValueChange={(value) => setMode(value as AutorunnerView["mode"])}
+                    disabled={pending}
+                  >
+                    <SelectTrigger className="w-56" aria-label="Volgorde van de autorunner">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(MODE_LABELS) as AutorunnerView["mode"][]).map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {MODE_LABELS[m]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <label className="flex items-start gap-3">
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={review}
+                    onCheckedChange={(checked) => setReview(checked === true)}
+                    disabled={pending}
+                  />
+                  <span>
+                    <span className="font-medium">Review na elke build</span>
+                    <span className="block text-muted-foreground">
+                      Een review-run die fouten zelf oplost. Kost extra tijd en tokens.
+                    </span>
+                  </span>
+                </label>
+              </div>
+
+              {error && (
+                <p className="text-sm text-destructive" role="alert">
+                  {error}
+                </p>
+              )}
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
+                  Annuleren
+                </Button>
+                <Button onClick={() => void start()} disabled={pending}>
+                  {pending && <Loader2 className="animate-spin" />}
+                  Starten
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {last && (
+            <p className="text-sm text-muted-foreground">
+              Laatste autorunner: {last.status === "failed" ? "gestopt door een fout" : last.status === "completed" ? "klaar" : "gestopt"}
+              {last.note && ` · ${last.note}`}
+            </p>
+          )}
+        </div>
+      )}
+      {!current && error && (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}

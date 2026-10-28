@@ -58,7 +58,7 @@ export function agentRunsEnabled(): boolean {
   return process.env.ENABLE_AGENT_RUNS === "true";
 }
 
-function runsDir(): string {
+export function runsDir(): string {
   return path.resolve(process.env.AGENT_RUNS_DIR || path.join(process.cwd(), ".agent-runs"));
 }
 
@@ -71,7 +71,7 @@ function shQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-function isAlive(pid: number | null): boolean {
+export function isAlive(pid: number | null): boolean {
   if (!pid) return false;
   try {
     process.kill(pid, 0);

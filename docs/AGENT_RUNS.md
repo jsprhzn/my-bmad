@@ -51,6 +51,16 @@ A dev run works in its own git worktree and branch. When it finishes, its commit
 
 When that rebase hits a conflict, an agent resolves it in the worktree, with the same account and model as the build. It gets up to three tries to finish the rebase. If the conflicts remain, the rebase is aborted and nothing is merged; the run then shows the reason. The resolver's output is saved as `<run-id>.conflict.log` next to the run's other files. Nothing runs the project's tests after a conflict is resolved.
 
+## Autorunner
+
+The **Autorunner starten** button above the stories board and above the agent runs starts a queue. It takes open stories (backlog or ready-for-dev) whose dependencies are done, from `story-dependencies.yaml`, and runs each build in auto mode, then a review if that is on. Pick **Een voor een** (one at a time) or **Parallel (max 3)**.
+
+- It stops when a story fails, or when a story is blocked in sprint-status. Stories already running finish.
+- When the Claude account hits its token limit, the queue waits until the limit resets (from Claude's message, or 30 minutes when there is none) and runs that step again, up to six times.
+- **Stop autorunner** lets the running stories finish and starts no new ones.
+
+The queue runs in a detached process (`scripts/autorunner.ts`), so it keeps going when the browser closes. Its state is in `.agent-runs/autorunners/`. The project needs `_bmad-output/implementation-artifacts/sprint-status.yaml` and `story-dependencies.yaml`.
+
 ## Auto mode and parallel runs
 
 The project page has an **Agent-instellingen** button with two options, both off by default. They apply to every run of the project until you change them:

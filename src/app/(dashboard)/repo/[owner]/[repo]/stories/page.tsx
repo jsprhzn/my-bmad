@@ -2,6 +2,9 @@ import { redirect, notFound } from "next/navigation";
 import { getCachedBmadProject } from "@/lib/bmad/cached-project";
 import { getGitHubToken } from "@/lib/github/client";
 import { StoriesView } from "@/components/stories/stories-view";
+import { RefreshRepoButton } from "@/components/shared/refresh-repo-button";
+import { AutorunnerControl } from "@/components/agents/autorunner-control";
+import { agentRunsEnabled } from "@/lib/agents/run-store";
 import {
   getAuthenticatedUserId,
   getAuthenticatedRepoConfig,
@@ -27,12 +30,16 @@ export default async function StoriesPage({ params }: StoriesPageProps) {
   return (
     <div className="space-y-8 pb-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Stories</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-3xl font-bold tracking-tight">Stories</h1>
+          <RefreshRepoButton owner={owner} name={repoName} />
+        </div>
         <p className="text-muted-foreground mt-1">
           {project.stories.length} stories across {project.epics.length}{" "}
           epics
         </p>
       </div>
+      {isLocal && agentRunsEnabled() && <AutorunnerControl owner={owner} repo={repoName} />}
       <StoriesView stories={project.stories} epics={project.epics} />
     </div>
   );
