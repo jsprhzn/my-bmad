@@ -14,6 +14,8 @@ export function normalizeStoryStatus(raw: string | undefined): StoryStatus {
   if (s === "ready-for-dev" || s === "ready") return "ready-for-dev";
   if (s === "backlog" || s === "todo" || s === "pending") return "backlog";
   if (s === "optional") return "backlog";
+  // Split into subtasks (4.1a, 4.1b, …): the subtasks are the work, the parent is only a reference.
+  if (s === "split") return "split";
   return "backlog";
 }
 

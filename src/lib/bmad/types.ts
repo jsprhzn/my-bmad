@@ -5,6 +5,7 @@ export type StoryStatus =
   | "blocked"
   | "ready-for-dev"
   | "backlog"
+  | "split"
   | "unknown";
 
 export type EpicStatus = "done" | "in-progress" | "not-started";
