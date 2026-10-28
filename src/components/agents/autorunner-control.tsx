@@ -21,9 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatDuration, formatTime } from "@/lib/agents/format";
-import type { Quota, QuotaWindow } from "@/lib/agents/quota";
 import {
-  getAgentUsage,
   listAutorunnerViews,
   setAutorunnerPaused,
   startAutorunner,
@@ -67,24 +65,6 @@ function RunnerHistory({ views }: { views: AutorunnerView[] }) {
   );
 }
 
-/** The plan limit as Claude Code reports it: the session and the week, as compact chips with when each resets. */
-function QuotaLine({ quota }: { quota: Quota }) {
-  const chip = (label: string, w: QuotaWindow | null) =>
-    w && (
-      <span className="inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs">
-        <span className="text-muted-foreground">{label}</span>
-        <span className="font-medium">{w.usedPercent}%</span>
-        <span className="text-muted-foreground">reset {w.resets}</span>
-      </span>
-    );
-  return (
-    <div className="flex flex-wrap gap-2">
-      {chip("Sessie", quota.session)}
-      {chip("Week", quota.week)}
-    </div>
-  );
-}
-
 function allPaused(view: AutorunnerView): boolean {
   return view.stories.length > 0 && view.stories.every((story) => story.paused);
 }
@@ -96,7 +76,6 @@ function allPaused(view: AutorunnerView): boolean {
  */
 export function AutorunnerControl({ owner, repo }: { owner: string; repo: string }) {
   const [views, setViews] = useState<AutorunnerView[]>([]);
-  const [quota, setQuota] = useState<Quota | null>(null);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<AutorunnerView["mode"]>("serial");
   const [review, setReview] = useState(true);
@@ -110,8 +89,6 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
       if (alive && result.success) {
         setViews(result.data);
       }
-      const tokens = await getAgentUsage({ owner, name: repo });
-      if (alive && tokens.success) setQuota(tokens.data);
     };
     void poll();
     const timer = setInterval(() => void poll(), POLL_MS);
@@ -164,7 +141,6 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
 
   return (
     <div className="space-y-2">
-      {quota && <QuotaLine quota={quota} />}
       {current ? (
         <div className="space-y-3 rounded-lg border p-3 text-sm">
           <div className="flex flex-wrap items-center gap-3">
