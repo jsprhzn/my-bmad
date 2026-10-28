@@ -162,6 +162,15 @@ function getColumns(
     return story ? storyHref(basePath, story.id) : null;
   };
   const statusOf = (number: string) => storyByNumber.get(number)?.status ?? null;
+  // The stories that wait on each story: the inverse of "depends on".
+  const waitingOn = new Map<string, string[]>();
+  for (const story of storyByNumber.values()) {
+    const number = storyNumber(story.id);
+    if (!number) continue;
+    for (const dependency of story.dependsOn ?? []) {
+      waitingOn.set(dependency, [...(waitingOn.get(dependency) ?? []), number]);
+    }
+  }
   return [
     {
       accessorKey: "id",
@@ -224,10 +233,14 @@ function getColumns(
       enableSorting: false,
     },
     {
-      id: "parallelWith",
-      header: "Can run now",
+      id: "waitingOn",
+      header: "Waiting on this",
       cell: ({ row }) => (
-        <NumberChips numbers={row.original.parallelWith ?? []} hrefFor={hrefFor} max={1} />
+        <NumberChips
+          numbers={waitingOn.get(storyNumber(row.original.id) ?? "") ?? []}
+          hrefFor={hrefFor}
+          statusOf={statusOf}
+        />
       ),
       enableSorting: false,
     },
