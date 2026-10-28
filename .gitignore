@@ -62,3 +62,6 @@ next-env.d.ts
 
 # Agent runs started from the UI (logs, prompts, run records)
 /.agent-runs/
+
+# JetBrains IDE settings
+.idea/
