@@ -120,7 +120,7 @@ export type BmadFileMetadata = {
 };
 
 export type ParsedBmadFile = {
-  contentType: "markdown" | "yaml" | "json" | "text";
+  contentType: "markdown" | "yaml" | "json" | "html" | "text";
   frontmatter: Record<string, unknown> | null;
   metadata: BmadFileMetadata | null;
   body: string;

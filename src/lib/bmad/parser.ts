@@ -452,7 +452,7 @@ function extractMetadata(
  */
 export function parseBmadFile(
   content: string,
-  contentType: "markdown" | "yaml" | "json" | "text",
+  contentType: "markdown" | "yaml" | "json" | "html" | "text",
 ): ParsedBmadFile {
   try {
     switch (contentType) {
@@ -503,6 +503,16 @@ export function parseBmadFile(
           parseError: null,
         };
       }
+      case "html":
+        // Shown in a sandboxed frame by the docs browser, so the source is kept as-is.
+        return {
+          contentType,
+          frontmatter: null,
+          metadata: null,
+          body: content,
+          rawContent: content,
+          parseError: null,
+        };
       case "text":
       default:
         return {

@@ -276,6 +276,15 @@ function FilePanel({
                       onOpenFile={handleSelect}
                     />
                   </>
+                ) : parsedFile.contentType === "html" ? (
+                  // Rendered as a page, not as source. No allow-same-origin, so
+                  // scripts in the file run in an opaque origin and cannot reach the app.
+                  <iframe
+                    title={selectedPath ?? "HTML document"}
+                    srcDoc={parsedFile.body}
+                    sandbox="allow-scripts"
+                    className="w-full h-[80vh] rounded-lg border bg-background"
+                  />
                 ) : parsedFile.contentType === "yaml" ? (
                   <CodeRenderer content={parsedFile.body} language="yaml" />
                 ) : parsedFile.contentType === "json" ? (
