@@ -10,6 +10,10 @@ import {
 } from "@/components/ui/tooltip";
 import { fetchParsedFileContent } from "@/actions/repo-actions";
 
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 interface DocumentatieViewProps {
   owner: string;
   repo: string;
@@ -33,7 +37,7 @@ export function DocumentatieView({ owner, repo, indexPath, html }: DocumentatieV
       const data = event.data as { type?: unknown; href?: unknown } | null;
       if (data?.type !== "open-doc" || typeof data.href !== "string") return;
       // Only plain file names in the index folder; anything else is ignored.
-      if (!/^[\w.-]+\.html$/.test(data.href)) return;
+      if (!/^[\w.-]+\.(html|md)$/.test(data.href)) return;
 
       setLoading(true);
       setError(null);
@@ -43,8 +47,12 @@ export function DocumentatieView({ owner, repo, indexPath, html }: DocumentatieV
         setError(result.error);
         return;
       }
+      // Markdown is shown as its raw source, so the ".md" links keep working.
+      const next = data.href.endsWith(".md")
+        ? `<pre style="white-space:pre-wrap;font:14px/1.5 ui-monospace,monospace;padding:16px;margin:0">${escapeHtml(result.data.rawContent)}</pre>`
+        : result.data.body;
       setHistory((prev) => [...prev, current]);
-      setCurrent({ html: result.data.body, title: data.href });
+      setCurrent({ html: next, title: data.href });
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
