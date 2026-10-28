@@ -90,7 +90,8 @@ export function AgentRunsList({ owner, repo }: { owner: string; repo: string }) 
   if (runs === null) return <p className="text-sm text-muted-foreground">Loading…</p>;
 
   const runningCount = runs.filter((run) => run.status === "running").length;
-  const visible = showFinished ? runs : runs.filter((run) => run.status === "running");
+  // "Show finished" reveals the completed runs; failed runs stay visible either way.
+  const visible = showFinished ? runs : runs.filter((run) => run.status !== "completed");
   const projectPath = `/repo/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
 
   return (
