@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { ChangedFile, RunChanges } from "@/lib/agents/run-changes";
-import { parseUnifiedDiff } from "@/lib/agents/unified-diff";
+import { addedFileContent, parseUnifiedDiff } from "@/lib/agents/unified-diff";
 import { getAgentRunChanges, getAgentRunFileDiff, getStoryArtifacts } from "@/actions/agent-actions";
 import { fetchFileContent } from "@/actions/repo-actions";
 import { MarkdownRenderer } from "@/components/docs/markdown-renderer";
@@ -25,6 +25,38 @@ const STATUS_LETTER: Record<ChangedFile["status"], { letter: string; className: 
 };
 
 type Loaded = RunChanges & { branch: string | null; baseBranch: string | null; running: boolean };
+
+/**
+ * A new markdown file shows as rendered text, with the diff one click away. Other files, and markdown that
+ * the diff only partly shows, show the diff.
+ */
+function FileDiffView({
+  path,
+  diff,
+  preview,
+  onPreviewChange,
+}: {
+  path: string;
+  diff: string;
+  preview: boolean;
+  onPreviewChange: (preview: boolean) => void;
+}) {
+  const content = path.endsWith(".md") ? addedFileContent(diff) : null;
+  if (content === null) return <DiffView diff={diff} />;
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        <Button variant={preview ? "secondary" : "ghost"} size="sm" onClick={() => onPreviewChange(true)}>
+          Voorbeeld
+        </Button>
+        <Button variant={preview ? "ghost" : "secondary"} size="sm" onClick={() => onPreviewChange(false)}>
+          Diff
+        </Button>
+      </div>
+      {preview ? <MarkdownRenderer content={content} filePath={path} /> : <DiffView diff={diff} />}
+    </div>
+  );
+}
 
 /** A diff as readable hunks: line numbers in gutters, +/− rows, wrapped text. */
 function DiffView({ diff }: { diff: string }) {
@@ -111,6 +143,7 @@ export function RunChangesSheet({
   const [selected, setSelected] = useState<string | null>(null);
   const [diff, setDiff] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
+  const [preview, setPreview] = useState(true);
   const [artifacts, setArtifacts] = useState<string[]>([]);
   const [artifact, setArtifact] = useState<{ path: string; content: string | null } | null>(null);
 
@@ -181,7 +214,7 @@ export function RunChangesSheet({
 
   return (
     <Sheet open={open} onOpenChange={close}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
+      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-3xl lg:max-w-5xl">
         <SheetHeader>
           <SheetTitle>Context</SheetTitle>
           <SheetDescription className="truncate">{title}</SheetDescription>
@@ -320,7 +353,7 @@ export function RunChangesSheet({
                   Diff laden…
                 </p>
               ) : (
-                diff && <DiffView diff={diff} />
+                diff && <FileDiffView path={selected} diff={diff} preview={preview} onPreviewChange={setPreview} />
               )}
             </>
           )}
