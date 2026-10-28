@@ -13,7 +13,7 @@ Step-by-step guide to run MyBMAD Dashboard locally.
 ## 1. Clone the repository
 
 ```bash
-git clone https://github.com/DevHDI/my-bmad.git
+git clone https://github.com/Huzen-Software/my-bmad.git
 cd my-bmad
 ```
 

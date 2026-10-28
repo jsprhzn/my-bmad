@@ -69,7 +69,7 @@ MyBMAD Dashboard connects to your GitHub repositories (or local folders), reads 
 > Full guide with all environment variables explained: **[docs/GETTING_STARTED.md](./docs/GETTING_STARTED.md)**
 
 ```bash
-git clone https://github.com/DevHDI/my-bmad.git
+git clone https://github.com/Huzen-Software/my-bmad.git
 cd my-bmad
 pnpm install
 
