@@ -28,6 +28,7 @@ import {
   getRun,
   isAlive,
   listRuns,
+  setRunPaused,
   startRun,
   stopRun,
   type AgentRun,
@@ -360,6 +361,25 @@ export async function getAgentRun(
     const found = await getRun(parsed.data.runId, access.data);
     if (!found) return { success: false, error: "Run not found", code: "NOT_FOUND" };
     return { success: true, data: found };
+  } catch (error) {
+    return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
+  }
+}
+
+/** Pause a running agent, or resume a paused one. */
+export async function setAgentRunPaused(
+  input: z.infer<typeof runSchema> & { paused: boolean },
+): Promise<ActionResult<AgentRun>> {
+  const parsed = runSchema.extend({ paused: z.boolean() }).safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
+  }
+  const access = await requireAgentProject(parsed.data.owner, parsed.data.name);
+  if (!access.success) return access;
+  try {
+    const run = await setRunPaused(parsed.data.runId, access.data, parsed.data.paused);
+    if (!run) return { success: false, error: "Run not found", code: "NOT_FOUND" };
+    return { success: true, data: run };
   } catch (error) {
     return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
   }
