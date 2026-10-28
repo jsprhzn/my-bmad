@@ -48,6 +48,7 @@ import {
   stagesOf,
   type StageView,
 } from "@/lib/agents/run-stages";
+import { runChanges, runFileDiff, type RunChanges } from "@/lib/agents/run-changes";
 import type { ActionResult } from "@/lib/types";
 
 const repoSchema = z.object({
@@ -374,6 +375,66 @@ export async function getAgentRun(
   }
 }
 
+/** The files a run changed on its branch, and whether the run is still going. */
+export async function getAgentRunChanges(
+  input: z.infer<typeof runSchema>,
+): Promise<ActionResult<RunChanges & { branch: string | null; baseBranch: string | null; running: boolean }>> {
+  const parsed = runSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
+  }
+  const access = await requireAgentProject(parsed.data.owner, parsed.data.name);
+  if (!access.success) return access;
+  try {
+    const found = await getRun(parsed.data.runId, access.data);
+    if (!found) return { success: false, error: "Run not found", code: "NOT_FOUND" };
+    const { run } = found;
+    const changes = await runChanges({
+      checkout: access.data.localPath,
+      branch: run.branch,
+      baseBranch: run.baseBranch,
+    });
+    return {
+      success: true,
+      data: {
+        ...changes,
+        branch: run.branch ?? null,
+        baseBranch: run.baseBranch ?? null,
+        running: run.status === "running",
+      },
+    };
+  } catch (error) {
+    return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
+  }
+}
+
+/** The diff of one file the run changed on its branch. */
+export async function getAgentRunFileDiff(
+  input: z.infer<typeof runSchema> & { path: string },
+): Promise<ActionResult<string | null>> {
+  const parsed = runSchema.extend({ path: z.string().min(1).max(1024) }).safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
+  }
+  const access = await requireAgentProject(parsed.data.owner, parsed.data.name);
+  if (!access.success) return access;
+  try {
+    const found = await getRun(parsed.data.runId, access.data);
+    if (!found) return { success: false, error: "Run not found", code: "NOT_FOUND" };
+    const { run } = found;
+    if (!run.branch) return { success: true, data: null };
+    const diff = await runFileDiff({
+      checkout: access.data.localPath,
+      branch: run.branch,
+      baseBranch: run.baseBranch,
+      path: parsed.data.path,
+    });
+    return { success: true, data: diff };
+  } catch (error) {
+    return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
+  }
+}
+
 /** Pause a running agent, or resume a paused one. */
 export async function setAgentRunPaused(
   input: z.infer<typeof runSchema> & { paused: boolean },
@@ -425,6 +486,7 @@ export interface AutorunnerStoryView {
   phase: "build" | "review";
   runId: string;
   paused: boolean;
+  branch: string | null;
   startedAt: string;
   stages: StageView[];
   logTail: string[];
@@ -492,6 +554,7 @@ async function storyViewsOf(state: AutorunnerState, runs: AgentRun[]): Promise<A
         phase: story.phase,
         runId: story.runId,
         paused: run?.paused ?? false,
+        branch: run?.branch ?? null,
         startedAt: run?.startedAt ?? state.startedAt,
         stages: stagesOf({
           current,

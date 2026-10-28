@@ -424,21 +424,3 @@
     mix-blend-mode: normal;
 }
 
-/* A stage the agent is working on: a short bar slides along the track. */
-@keyframes queue-sweep {
-    from {
-        left: -40%;
-    }
-    to {
-        left: 100%;
-    }
-}
-
-.queue-sweep {
-    position: absolute;
-    inset-block: 0;
-    width: 40%;
-    border-radius: 9999px;
-    background: var(--primary);
-    animation: queue-sweep 1.6s ease-in-out infinite;
-}

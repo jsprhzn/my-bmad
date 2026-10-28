@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, Pause, Play, Square } from "lucide-react";
+import { GitBranch, Loader2, Pause, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { RunStatusBadge } from "@/components/agents/run-status-badge";
+import { RunChangesSheet } from "@/components/agents/run-changes-sheet";
 import {
   listAgentRuns,
   setAgentRunPaused,
@@ -33,6 +34,7 @@ export function AgentRunsList({ owner, repo }: { owner: string; repo: string }) 
   const [runs, setRuns] = useState<AgentRun[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showFinished, setShowFinished] = useState(false);
+  const [changesRun, setChangesRun] = useState<AgentRun | null>(null);
   const [now, setNow] = useState(() => Date.now());
   // Runs with a pause, resume or stop in flight.
   const [busy, setBusy] = useState<Set<string>>(new Set());
@@ -93,6 +95,14 @@ export function AgentRunsList({ owner, repo }: { owner: string; repo: string }) 
 
   return (
     <div className="space-y-4">
+      <RunChangesSheet
+        owner={owner}
+        repo={repo}
+        runId={changesRun?.id ?? null}
+        title={changesRun ? `${changesRun.storyId}: ${changesRun.storyTitle}` : ""}
+        open={changesRun !== null}
+        onOpenChange={(open) => !open && setChangesRun(null)}
+      />
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-muted-foreground">{runningCount} running</p>
         <Button
@@ -144,8 +154,19 @@ export function AgentRunsList({ owner, repo }: { owner: string; repo: string }) 
                           : ` · loopt ${formatDuration(now - Date.parse(run.startedAt))}`}
                       </span>
                       {run.costUsd !== null && <span>· ${run.costUsd.toFixed(2)}</span>}
+                      {run.branch && (
+                        <span className="inline-flex min-w-0 items-center gap-1 font-mono">
+                          · <GitBranch className="size-3 shrink-0" aria-hidden="true" />
+                          <span className="truncate">{run.branch}</span>
+                        </span>
+                      )}
                     </p>
                   </Link>
+                  {run.kind === "dev" && (
+                    <Button variant="outline" size="sm" onClick={() => setChangesRun(run)}>
+                      Wijzigingen
+                    </Button>
+                  )}
                   {run.status === "running" && run.paused ? (
                     <Badge variant="outline">Gepauzeerd</Badge>
                   ) : (

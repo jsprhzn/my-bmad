@@ -112,6 +112,8 @@ export interface ActiveStory {
   runId: string;
   /** The models planned for the story's actions, shown before their run starts. */
   models?: PlannedModels;
+  /** For a review: the build run whose held branch it works on. */
+  buildRunId?: string;
 }
 
 export interface WaitingStory {
@@ -121,6 +123,8 @@ export interface WaitingStory {
   /** ISO time to start the run again. */
   at: string;
   attempts: number;
+  /** For a review: the build run whose held branch it works on. */
+  buildRunId?: string;
 }
 
 export interface AutorunnerState {
