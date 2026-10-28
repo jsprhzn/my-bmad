@@ -135,6 +135,24 @@ const MERGE_ATTEMPTS = 3;
  * The prompt for the agent that resolves rebase conflicts. It runs inside the
  * story worktree while the rebase is stopped on a conflict.
  */
+/**
+ * The prompt for an agent that finishes a build which stopped with changes
+ * left uncommitted in its worktree.
+ */
+export function finishPrompt(): string {
+  return [
+    "The build of this story stopped and left changes uncommitted in this worktree.",
+    "Started from MyBMAD; nobody is watching to answer questions.",
+    "",
+    "- Run `git status` and `git diff` to see what was left.",
+    "- If the story's work is complete (see its spec in _bmad-output/implementation-artifacts), review the changes and commit them with `git add` and `git commit`, with a clear message.",
+    "- If the work is not complete, commit what is done so the state is saved, and say what is missing.",
+    "- Change only what the story needs. Do not start new work and do not touch unrelated files.",
+    "- Do not run `git reset`, `git checkout --`, or switch branches.",
+    "",
+  ].join("\n");
+}
+
 export function conflictPrompt(): string {
   return [
     "A rebase of this story branch onto the branch it was started from stops with merge conflicts.",
@@ -168,6 +186,8 @@ export function mergeScript(p: {
   resolveCommand: string;
   conflictPromptFile: string;
   conflictLog: string;
+  /** Agent that commits what a build left uncommitted, reading finishPrompt from this file. */
+  finishPromptFile?: string;
 }): string {
   return [
     "#!/bin/sh",
@@ -180,10 +200,17 @@ export function mergeScript(p: {
     `RESOLVE=${shQuote(p.resolveCommand)}`,
     `PROMPT=${shQuote(p.conflictPromptFile)}`,
     `CONFLICT_LOG=${shQuote(p.conflictLog)}`,
+    `FINISH_PROMPT=${shQuote(p.finishPromptFile ?? "")}`,
     // Shared by every worktree of the checkout, so only one run merges at a time.
     'LOCK="$(git -C "$CHECKOUT" rev-parse --path-format=absolute --git-common-dir)/agent-merge.lock"',
     'fail() { echo "Niet samengevoegd: $1" > "$RESULT"; exit 1; }',
-    '[ -z "$(git -C "$WORKTREE" status --porcelain)" ] || fail "de run heeft ongecommitte wijzigingen achtergelaten."',
+    // A build that left changes behind gets an agent to finish and commit them, twice at most.
+    'for i in 1 2; do',
+    '  [ -n "$(git -C "$WORKTREE" status --porcelain)" ] || break',
+    '  [ -n "$FINISH_PROMPT" ] || break',
+    '  (cd "$WORKTREE" && eval "$RESOLVE") < "$FINISH_PROMPT" >> "$CONFLICT_LOG" 2>&1',
+    'done',
+    '[ -z "$(git -C "$WORKTREE" status --porcelain)" ] || fail "de run heeft ongecommitte wijzigingen achtergelaten, die ook de agent niet heeft vastgelegd."',
     'TARGET=$(git -C "$CHECKOUT" symbolic-ref --quiet --short HEAD) || fail "de hoofdwerkboom staat niet op een branch."',
     "until mkdir \"$LOCK\" 2>/dev/null; do sleep 2; done",
     'trap \'rmdir "$LOCK"\' EXIT',
@@ -327,6 +354,8 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
     const storyPrefix = `${input.storyId.replace(/\./g, "-")}-`;
     const conflictPromptFile = runFile(id, "conflict.prompt.txt");
     await writeFile(conflictPromptFile, conflictPrompt(), "utf8");
+    const finishPromptFile = runFile(id, "finish.prompt.txt");
+    await writeFile(finishPromptFile, finishPrompt(), "utf8");
     await writeFile(runFile(id, "start.sh"), startScript({ checkout: input.localPath, storyPrefix }), "utf8");
     await writeFile(
       runFile(id, "merge.sh"),
@@ -339,6 +368,7 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
         // Resolves conflicts with the same account and model as the build, without resuming its session.
         resolveCommand: template.replaceAll("{model}", input.model),
         conflictPromptFile,
+        finishPromptFile,
         conflictLog: runFile(id, "conflict.log"),
       }),
       "utf8",
