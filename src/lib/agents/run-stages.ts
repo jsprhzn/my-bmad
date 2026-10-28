@@ -32,7 +32,13 @@ const TEST_COMMAND =
 interface ToolEvent {
   type?: string;
   message?: {
-    content?: Array<{ type?: string; name?: string; input?: Record<string, unknown> }>;
+    content?: Array<{
+      type?: string;
+      id?: string;
+      tool_use_id?: string;
+      name?: string;
+      input?: Record<string, unknown>;
+    }>;
   };
 }
 
@@ -55,9 +61,15 @@ export function reachedStages(stream: string): StageId[] {
   const reach = (stage: StageId) => {
     if (!reached.includes(stage)) reached.push(stage);
   };
+  // Subagents still running: the tests they run belong to the build they are doing, not to a test stage.
+  const openSubagents = new Set<string>();
   for (const line of stream.split("\n")) {
     const event = parseLine(line);
     for (const block of event?.message?.content ?? []) {
+      if (block.type === "tool_result" && block.tool_use_id) {
+        openSubagents.delete(block.tool_use_id);
+        continue;
+      }
       if (block.type !== "tool_use") continue;
       const input = block.input ?? {};
       const file = typeof input.file_path === "string" ? input.file_path : "";
@@ -65,8 +77,9 @@ export function reachedStages(stream: string): StageId[] {
         if (pattern.test(file)) reach(stage);
       }
       if (block.name === "Skill" && String(input.skill ?? "").includes("review")) reach("review");
+      if ((block.name === "Agent" || block.name === "Task") && block.id) openSubagents.add(block.id);
       const command = typeof input.command === "string" ? input.command : "";
-      if (reached.includes("build") && TEST_COMMAND.test(command)) reach("test");
+      if (reached.includes("build") && openSubagents.size === 0 && TEST_COMMAND.test(command)) reach("test");
     }
   }
   return reached;

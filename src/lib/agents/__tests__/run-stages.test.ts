@@ -60,6 +60,34 @@ describe("logTail", () => {
   });
 });
 
+describe("reachedStages with a build subagent", () => {
+  const agent = (id: string) =>
+    JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id, name: "Agent", input: {} }] } });
+  const result = (id: string) =>
+    JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id }] } });
+  const bash = (command: string) => toolUse("Bash", { command });
+
+  it("keeps test runs inside a running build subagent in the build stage", () => {
+    const stream = [
+      toolUse("Read", { file_path: "/p/.claude/skills/bmad-build-auto/step-03-implement.md" }),
+      agent("a1"),
+      bash("./mvnw -q test"),
+    ].join("\n");
+    expect(reachedStages(stream)).toEqual(["build"]);
+  });
+
+  it("counts test runs as the test stage once the subagent has returned", () => {
+    const stream = [
+      toolUse("Read", { file_path: "/p/.claude/skills/bmad-build-auto/step-03-implement.md" }),
+      agent("a1"),
+      bash("./mvnw -q test"),
+      result("a1"),
+      bash("./mvnw -q test"),
+    ].join("\n");
+    expect(reachedStages(stream)).toEqual(["build", "test"]);
+  });
+});
+
 describe("stagesOf", () => {
   const models = { build: "sonnet" as const, review: "opus" as const };
 
