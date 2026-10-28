@@ -48,7 +48,7 @@ export function AgentRunsList({ owner, repo }: { owner: string; repo: string }) 
   useEffect(() => {
     let active = true;
     const load = async () => {
-      const result = await listAgentRuns({ owner, name: repo });
+      const result = await listAgentRuns({ owner, name: repo, withoutAutorun: true });
       if (!active) return;
       if (result.success) {
         setRuns(result.data);
