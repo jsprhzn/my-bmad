@@ -35,6 +35,46 @@ const MODE_LABELS: Record<AutorunnerView["mode"], string> = {
   parallel: "Parallel (max 3)",
 };
 
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleString("nl-NL", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** "45 s", "12 min", "1 u 05 min". */
+function formatDuration(ms: number): string {
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 1) return `${Math.max(0, Math.floor(ms / 1000))} s`;
+  if (minutes < 60) return `${minutes} min`;
+  return `${Math.floor(minutes / 60)} u ${String(minutes % 60).padStart(2, "0")} min`;
+}
+
+/** Tokens as "842.110" or "3,2 mln". */
+function formatTokens(count: number): string {
+  if (count >= 1_000_000) {
+    return `${(count / 1_000_000).toLocaleString("nl-NL", { maximumFractionDigits: 1 })} mln tokens`;
+  }
+  return `${count.toLocaleString("nl-NL")} tokens`;
+}
+
+/** Start, end or running time, duration, tokens and cost of one queue. */
+function QueueTotals({ view, now }: { view: AutorunnerView; now: number }) {
+  const end = view.endedAt ? Date.parse(view.endedAt) : now;
+  const duration = end - Date.parse(view.startedAt);
+  return (
+    <p className="text-muted-foreground">
+      Gestart {formatTime(view.startedAt)}
+      {view.endedAt ? ` · geëindigd ${formatTime(view.endedAt)}` : ""} · {view.endedAt ? "duur" : "loopt al"}{" "}
+      {formatDuration(duration)} · {formatTokens(view.inputTokens + view.outputTokens)}
+      {` (${formatTokens(view.inputTokens)} in, ${formatTokens(view.outputTokens)} uit)`} · $
+      {view.costUsd.toFixed(2)} · {view.runCount} runs
+    </p>
+  );
+}
+
 /**
  * Start, follow and stop the autorunner for a project: it takes open stories
  * from the backlog and runs them in auto mode. Shown above the stories board
@@ -47,12 +87,17 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
   const [review, setReview] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Re-rendered with each poll, so the running time stays current.
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     let alive = true;
     const poll = async () => {
       const result = await listAutorunnerViews({ owner, name: repo });
-      if (alive && result.success) setViews(result.data);
+      if (alive && result.success) {
+        setViews(result.data);
+        setNow(Date.now());
+      }
     };
     void poll();
     const timer = setInterval(() => void poll(), POLL_MS);
@@ -110,6 +155,7 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
               {current.waiting.length > 0 && ` · wacht op token-limiet`}
               {!current.driverAlive && " · de runner lijkt te zijn onderbroken"}
             </p>
+            <QueueTotals view={current} now={now} />
             {current.note && <p className="text-muted-foreground">{current.note}</p>}
           </div>
           <Button
@@ -196,10 +242,13 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
           </Dialog>
 
           {last && (
-            <p className="text-sm text-muted-foreground">
-              Laatste autorunner: {last.status === "failed" ? "gestopt door een fout" : last.status === "completed" ? "klaar" : "gestopt"}
-              {last.note && ` · ${last.note}`}
-            </p>
+            <div className="space-y-0.5 text-sm text-muted-foreground">
+              <p>
+                Laatste autorunner: {last.status === "failed" ? "gestopt door een fout" : last.status === "completed" ? "klaar" : "gestopt"}
+                {last.note && ` · ${last.note}`}
+              </p>
+              <QueueTotals view={last} now={now} />
+            </div>
           )}
         </div>
       )}

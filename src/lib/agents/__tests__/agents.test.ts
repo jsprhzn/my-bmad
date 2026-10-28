@@ -126,8 +126,16 @@ describe("stream formatting", () => {
       isError: false,
       numTurns: 4,
       costUsd: 0.1234,
+      inputTokens: 0,
+      outputTokens: 0,
       text: "Done.",
     });
+    const withUsage = JSON.stringify({
+      type: "result",
+      result: "Done.",
+      usage: { input_tokens: 10, cache_creation_input_tokens: 5, cache_read_input_tokens: 85, output_tokens: 40 },
+    });
+    expect(readStreamResult(withUsage)).toMatchObject({ inputTokens: 100, outputTokens: 40 });
     const failed = JSON.stringify({ type: "result", is_error: true, result: "Failed to authenticate" });
     expect(readStreamResult(failed)?.isError).toBe(true);
     expect(readStreamResult("still running")).toBeNull();
