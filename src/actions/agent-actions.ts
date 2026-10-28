@@ -35,7 +35,7 @@ import {
   stopRun,
   type AgentRun,
 } from "@/lib/agents/run-store";
-import { readQuota, type Quota } from "@/lib/agents/quota";
+import { readQuotaSnapshot, type Quota } from "@/lib/agents/quota";
 import {
   autorunnerFile,
   listAutorunners,
@@ -804,7 +804,7 @@ export async function getAgentUsage(
   try {
     const repo = await getAuthenticatedRepoConfig(access.data.userId, parsed.data.owner, parsed.data.name);
     const account = findClaudeAccount(repo?.agentAccount ?? undefined);
-    return { success: true, data: await readQuota(account?.configDir) };
+    return { success: true, data: readQuotaSnapshot(account?.configDir) };
   } catch (error) {
     return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
   }

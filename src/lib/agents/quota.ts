@@ -26,7 +26,13 @@ const WEEK = /Current week \(all models\): (\d+)% used · resets ([^\n(]+?)\s*\(
 /** A reading is good for a minute: the queue ticks every few seconds. */
 const CACHE_MS = 60 * 1000;
 const run = promisify(execFile);
-let cached: { dir: string | undefined; at: number; quota: Quota } | null = null;
+/** Per config folder: the last reading, when it was taken, and the read that is running now. */
+interface QuotaEntry {
+  at: number;
+  quota: Quota | null;
+  pending: Promise<Quota | null> | null;
+}
+const entries = new Map<string, QuotaEntry>();
 
 /** The quota from `/usage` output. Windows that are not in the text are null. */
 export function parseQuota(text: string, checkedAt: Date = new Date()): Quota {
@@ -41,9 +47,38 @@ export function parseQuota(text: string, checkedAt: Date = new Date()): Quota {
   };
 }
 
-/** The quota of the account whose config folder is given (the default account when none). */
+/**
+ * The quota of the account whose config folder is given (the default account when none).
+ * Waits for the first reading; after that a reading is returned at once, and an old one is
+ * refreshed in the background. The queue waits here, so its limit check uses a real reading.
+ */
 export async function readQuota(configDir?: string): Promise<Quota | null> {
-  if (cached && cached.dir === configDir && Date.now() - cached.at < CACHE_MS) return cached.quota;
+  const entry = refreshedEntry(configDir);
+  return entry.quota ?? entry.pending;
+}
+
+/** The last reading without waiting for one: null until the first read has finished. For the page. */
+export function readQuotaSnapshot(configDir?: string): Quota | null {
+  return refreshedEntry(configDir).quota;
+}
+
+/** The entry for a config folder, with a read started when it is missing or older than a minute. */
+function refreshedEntry(configDir?: string): QuotaEntry {
+  const key = configDir ?? "";
+  const entry = entries.get(key) ?? { at: 0, quota: null, pending: null };
+  entries.set(key, entry);
+  if (!entry.pending && Date.now() - entry.at >= CACHE_MS) {
+    entry.pending = fetchQuota(configDir).then((quota) => {
+      if (quota) entry.quota = quota;
+      entry.at = Date.now();
+      entry.pending = null;
+      return entry.quota;
+    });
+  }
+  return entry;
+}
+
+async function fetchQuota(configDir?: string): Promise<Quota | null> {
   try {
     const { stdout } = await run("claude", ["-p", "/usage", "--output-format", "json"], {
       env: configDir ? { ...process.env, CLAUDE_CONFIG_DIR: configDir } : process.env,
@@ -51,9 +86,7 @@ export async function readQuota(configDir?: string): Promise<Quota | null> {
     });
     const result = (JSON.parse(stdout) as { result?: string }).result ?? "";
     const quota = parseQuota(result);
-    if (!quota.session && !quota.week) return null;
-    cached = { dir: configDir, at: Date.now(), quota };
-    return quota;
+    return quota.session || quota.week ? quota : null;
   } catch {
     return null;
   }
