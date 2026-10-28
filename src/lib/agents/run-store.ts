@@ -42,6 +42,9 @@ export interface AgentRun {
   endedAt: string | null;
   exitCode: number | null;
   costUsd: number | null;
+  /** Tokens the run used, cache included; null until the run has ended. */
+  inputTokens?: number | null;
+  outputTokens?: number | null;
   numTurns: number | null;
   error: string | null;
   /** The run this one answers; its log comes before this run's log. */
@@ -106,6 +109,8 @@ async function refreshRun(run: AgentRun): Promise<AgentRun> {
     endedAt: run.endedAt ?? new Date().toISOString(),
     exitCode,
     costUsd: result?.costUsd ?? null,
+    inputTokens: result?.inputTokens ?? null,
+    outputTokens: result?.outputTokens ?? null,
     numTurns: result?.numTurns ?? null,
   };
   if (exitCode === 0 && result && !result.isError && merged) {

@@ -60,6 +60,8 @@ export async function runAutorunner(file: string): Promise<void> {
     const runs = await listRuns({ repoKey: state.repoKey, userId: state.userId });
     const runById = new Map(runs.map((r) => [r.id, r]));
     const now = new Date();
+    // Runs this tick starts; saved with the state so the queue can total their tokens and cost.
+    const started: string[] = [];
 
     // 1. Settle the runs that ended.
     const active: ActiveStory[] = [];
@@ -79,7 +81,7 @@ export async function runAutorunner(file: string): Promise<void> {
             continue;
           }
           if (state.review) {
-            const runId = await startStoryRun(state, account, "review", story, project, reviewSkill);
+            const runId = await startStoryRun(started, state, account, "review", story, project, reviewSkill);
             active.push({ ...story, phase: "review", runId });
             continue;
           }
@@ -123,7 +125,7 @@ export async function runAutorunner(file: string): Promise<void> {
         if (free <= 0) break;
         const story = project.stories.find((s) => s.number === retry.number);
         if (!story) continue;
-        const runId = await startStoryRun(state, account, retry.phase, story, project, retry.phase === "build" ? buildSkill : reviewSkill);
+        const runId = await startStoryRun(started, state, account, retry.phase, story, project, retry.phase === "build" ? buildSkill : reviewSkill);
         active.push({ key: story.key, number: story.number, phase: retry.phase, runId });
         waiting.splice(waiting.findIndex((w) => w.number === retry.number), 1);
         busy.add(story.number);
@@ -131,7 +133,7 @@ export async function runAutorunner(file: string): Promise<void> {
       }
       const fresh = nextStories({ stories: project.stories, graph: project.graph, busy, slots: free });
       for (const story of fresh) {
-        const runId = await startStoryRun(state, account, "build", story, project, buildSkill);
+        const runId = await startStoryRun(started, state, account, "build", story, project, buildSkill);
         active.push({ key: story.key, number: story.number, phase: "build", runId });
       }
     }
@@ -157,6 +159,7 @@ export async function runAutorunner(file: string): Promise<void> {
         active,
         waiting: pending,
         done: state.done,
+        runIds: [...state.runIds, ...started],
       });
       return;
     }
@@ -168,6 +171,7 @@ export async function runAutorunner(file: string): Promise<void> {
       active,
       waiting: pending,
       done: state.done,
+      runIds: [...state.runIds, ...started],
       note:
         failNote ??
         (pending.length > 0 && active.length === 0
@@ -205,6 +209,7 @@ async function readText(file: string): Promise<string> {
 
 /** Start one build or review run for a story, in auto mode, and return its run id. */
 async function startStoryRun(
+  started: string[],
   state: AutorunnerState,
   account: ClaudeAccount | null,
   phase: Phase,
@@ -235,6 +240,7 @@ async function startStoryRun(
       fixFindings: true,
     }),
   });
+  started.push(run.id);
   return run.id;
 }
 
@@ -252,6 +258,7 @@ async function finish(
     active?: ActiveStory[];
     waiting?: WaitingStory[];
     done?: string[];
+    runIds?: string[];
   },
 ): Promise<void> {
   const state = await readAutorunner(file);
@@ -263,6 +270,7 @@ async function finish(
     active: result.active ?? state.active,
     waiting: result.waiting ?? state.waiting,
     done: result.done ?? state.done,
+    runIds: result.runIds ?? state.runIds,
     note: result.note,
     endedAt: new Date().toISOString(),
     driverPid: null,

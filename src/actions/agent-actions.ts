@@ -389,17 +389,31 @@ const autorunnerStartSchema = repoSchema.extend({
 });
 
 /** The queue's state as the page shows it: whether its driver is still alive. */
-export interface AutorunnerView extends Omit<AutorunnerState, "userId" | "localPath"> {
+export interface AutorunnerView extends Omit<AutorunnerState, "userId" | "localPath" | "runIds"> {
   driverAlive: boolean;
+  /** Runs the queue started, and their totals so far. */
+  runCount: number;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
 }
 
-function viewOf(state: AutorunnerState): AutorunnerView {
+/** The queue as the page shows it; the totals come from the runs it started. */
+function viewOf(state: AutorunnerState, runs: AgentRun[]): AutorunnerView {
   const view: Partial<AutorunnerState> = { ...state };
   delete view.userId;
   delete view.localPath;
+  delete view.runIds;
+  const mine = runs.filter((r) => state.runIds.includes(r.id));
+  const sum = (pick: (r: AgentRun) => number | null | undefined) =>
+    mine.reduce((total, r) => total + (pick(r) ?? 0), 0);
   return {
-    ...(view as Omit<AutorunnerState, "userId" | "localPath">),
+    ...(view as Omit<AutorunnerState, "userId" | "localPath" | "runIds">),
     driverAlive: isAlive(state.driverPid),
+    runCount: mine.length,
+    costUsd: sum((r) => r.costUsd),
+    inputTokens: sum((r) => r.inputTokens),
+    outputTokens: sum((r) => r.outputTokens),
   };
 }
 
@@ -439,6 +453,7 @@ export async function startAutorunner(
       active: [],
       waiting: [],
       done: [],
+      runIds: [],
       note: null,
     };
     await writeAutorunner(file, state);
@@ -452,7 +467,7 @@ export async function startAutorunner(
     const started = { ...state, driverPid: child.pid ?? null };
     await writeAutorunner(file, started);
     revalidatePath(`/repo/${parsed.data.owner}/${parsed.data.name}`);
-    return { success: true, data: viewOf(started) };
+    return { success: true, data: viewOf(started, []) };
   } catch (error) {
     return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
   }
@@ -476,7 +491,8 @@ export async function stopAutorunner(
     }
     const updated = { ...state, stopRequested: true };
     await writeAutorunner(file, updated);
-    return { success: true, data: viewOf(updated) };
+    const runs = await listRuns({ repoKey: state.repoKey, userId: state.userId });
+    return { success: true, data: viewOf(updated, runs) };
   } catch (error) {
     return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
   }
@@ -494,7 +510,8 @@ export async function listAutorunnerViews(
   if (!access.success) return access;
   try {
     const states = await listAutorunners(access.data.repoKey, access.data.userId);
-    return { success: true, data: states.slice(0, 5).map(viewOf) };
+    const runs = await listRuns({ repoKey: access.data.repoKey, userId: access.data.userId });
+    return { success: true, data: states.slice(0, 5).map((state) => viewOf(state, runs)) };
   } catch (error) {
     return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
   }

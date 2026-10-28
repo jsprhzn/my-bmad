@@ -13,6 +13,12 @@ interface StreamEvent {
   num_turns?: number;
   result?: string;
   total_cost_usd?: number;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
   message?: {
     content?: Array<{
       type?: string;
@@ -28,6 +34,9 @@ export interface AgentRunResult {
   isError: boolean;
   numTurns: number;
   costUsd: number;
+  /** Prompt tokens, cache reads and writes included. */
+  inputTokens: number;
+  outputTokens: number;
   text: string;
 }
 
@@ -112,6 +121,15 @@ export function formatStream(content: string, options: FormatOptions = {}): stri
     .join("\n");
 }
 
+/** The Claude session a run ran in, so a reply can resume it. */
+export function readSessionId(content: string): string | null {
+  for (const line of content.split(/\r?\n/)) {
+    const event = parseEvent(line);
+    if (event?.type === "system" && event.subtype === "init") return event.session_id ?? null;
+  }
+  return null;
+}
+
 /** The final result event of a run, if it has ended. */
 export function readStreamResult(content: string): AgentRunResult | null {
   const lines = content.split(/\r?\n/);
@@ -122,6 +140,11 @@ export function readStreamResult(content: string): AgentRunResult | null {
         isError: event.is_error === true,
         numTurns: event.num_turns ?? 0,
         costUsd: event.total_cost_usd ?? 0,
+        inputTokens:
+          (event.usage?.input_tokens ?? 0) +
+          (event.usage?.cache_creation_input_tokens ?? 0) +
+          (event.usage?.cache_read_input_tokens ?? 0),
+        outputTokens: event.usage?.output_tokens ?? 0,
         text: event.result?.trim() ?? "",
       };
     }

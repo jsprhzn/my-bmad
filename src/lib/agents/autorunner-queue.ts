@@ -142,6 +142,8 @@ export interface AutorunnerState {
   active: ActiveStory[];
   waiting: WaitingStory[];
   done: string[];
+  /** Every run the queue started, in order: its tokens and cost are summed from these. */
+  runIds: string[];
   /** Why the queue is waiting, stopped or failed, for the UI. */
   note: string | null;
 }
@@ -158,7 +160,9 @@ export function autorunnerFile(id: string): string {
 export async function readAutorunner(file: string): Promise<AutorunnerState | null> {
   if (!existsSync(file)) return null;
   try {
-    return JSON.parse(await readFile(file, "utf8")) as AutorunnerState;
+    const state = JSON.parse(await readFile(file, "utf8")) as AutorunnerState;
+    // Queues started before run ids were kept have none.
+    return { ...state, runIds: state.runIds ?? [] };
   } catch {
     return null;
   }
