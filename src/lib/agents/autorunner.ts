@@ -199,7 +199,11 @@ export async function runAutorunner(file: string): Promise<void> {
       for (const story of fresh) {
         // A large story is split into subtasks first; the subtasks are built, not the story itself.
         const alreadySplit = state.split ?? [];
-        if (LARGE_COMPLEXITY.has(project.advice.get(story.number)?.complexity ?? "") && !alreadySplit.includes(story.number)) {
+        if (
+          state.splitLarge === true &&
+          LARGE_COMPLEXITY.has(project.advice.get(story.number)?.complexity ?? "") &&
+          !alreadySplit.includes(story.number)
+        ) {
           state.split = [...alreadySplit, story.number];
           const runId = await startStoryRun(started, state, account, "split", story, project, splitSkill, {
             prompt: splitPrompt(story),

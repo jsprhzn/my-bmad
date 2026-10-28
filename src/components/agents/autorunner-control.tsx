@@ -81,6 +81,7 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
   const [mode, setMode] = useState<AutorunnerView["mode"]>("parallel");
   const [review, setReview] = useState(true);
   const [keepAwake, setKeepAwake] = useState(true);
+  const [splitLarge, setSplitLarge] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -112,7 +113,7 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
   const start = async () => {
     setPending(true);
     setError(null);
-    const result = await startAutorunner({ owner, name: repo, mode, review, keepAwake });
+    const result = await startAutorunner({ owner, name: repo, mode, review, keepAwake, splitLarge });
     setPending(false);
     if (result.success) {
       setOpen(false);
@@ -261,6 +262,21 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
                     <span className="font-medium">Computer wakker houden</span>
                     <span className="block text-muted-foreground">
                       Voorkomt dat de Mac in slaap gaat zolang de autorunner draait. Een dichtgeklapte laptop slaapt nog steeds.
+                    </span>
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-3">
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={splitLarge}
+                    onCheckedChange={(checked) => setSplitLarge(checked === true)}
+                    disabled={pending}
+                  />
+                  <span>
+                    <span className="font-medium">Grote stories opsplitsen</span>
+                    <span className="block text-muted-foreground">
+                      Splitst L/XL-stories in subtasks voordat ze gebouwd worden. Kost een extra splitsingsrun; kleinere stories kunnen per run minder tokens gebruiken.
                     </span>
                   </span>
                 </label>

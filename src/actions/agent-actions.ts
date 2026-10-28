@@ -536,6 +536,7 @@ const autorunnerStartSchema = repoSchema.extend({
   mode: z.enum(["serial", "parallel"]),
   review: z.boolean(),
   keepAwake: z.boolean(),
+  splitLarge: z.boolean(),
 });
 
 /** The queue's state as the page shows it: whether its driver is still alive. */
@@ -674,6 +675,7 @@ export async function startAutorunner(
       account: repo?.agentAccount ?? null,
       mode: parsed.data.mode,
       review: parsed.data.review,
+      splitLarge: parsed.data.splitLarge,
       status: "running",
       stopRequested: false,
       failed: false,
