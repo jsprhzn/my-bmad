@@ -45,7 +45,7 @@ export default async function DocumentatiePage({ params }: DocumentatiePageProps
   return (
     <div className="space-y-8 pb-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Documentatie</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Documentation</h1>
         <p className="text-muted-foreground mt-1">
           Index of all specs, per epic
         </p>
@@ -58,7 +58,7 @@ export default async function DocumentatiePage({ params }: DocumentatiePageProps
           role="status"
         >
           <p>
-            Geen documentatie-index gevonden. Draai{" "}
+            No documentation index found. Run{" "}
             <code>python3 _bmad/scripts/build_spec_index.py</code>.
           </p>
         </div>

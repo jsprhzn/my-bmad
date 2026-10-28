@@ -27,7 +27,7 @@ export function DocumentatieView({ owner, repo, indexPath, html }: DocumentatieV
   const frameRef = useRef<HTMLIFrameElement>(null);
   // Pages opened from the index, so "Terug" can return to the one before.
   const [history, setHistory] = useState<{ html: string; title: string }[]>([]);
-  const [current, setCurrent] = useState({ html, title: "Documentatie" });
+  const [current, setCurrent] = useState({ html, title: "Documentation" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
