@@ -63,7 +63,7 @@ export function AgentSettingsDialog({ owner, name, autorunner, oneAtATime }: Age
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Bot className="size-4" />
-          Agent-instellingen
+          Agent-instellingen…
         </Button>
       </DialogTrigger>
       <DialogContent>

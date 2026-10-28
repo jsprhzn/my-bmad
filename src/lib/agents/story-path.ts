@@ -33,7 +33,7 @@ export interface StoryPathResult {
 }
 
 /** Complexity from story-complexity.md that counts as large. */
-const LARGE_COMPLEXITY = new Set(["L", "XL"]);
+export const LARGE_COMPLEXITY = new Set(["L", "XL"]);
 
 const TIER_RANK: Record<ModelTier, number> = { haiku: 0, sonnet: 1, opus: 2 };
 

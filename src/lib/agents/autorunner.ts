@@ -26,6 +26,7 @@ import { buildAgentPrompt } from "./prompts";
 import { listProjectSkills } from "./project-skills";
 import { recommendedModel, type AgentRunKind } from "./models";
 import type { PlannedModels } from "./run-stages";
+import { LARGE_COMPLEXITY } from "./story-path";
 import { listRuns, runsDir, startRun, type AgentRun, type HeldBranch } from "./run-store";
 import { allowanceFor, quotaLoad, readQuota } from "./quota";
 
@@ -50,6 +51,8 @@ export async function runAutorunner(file: string): Promise<void> {
     });
     return;
   }
+  // A split runs as a plan run; without a plan skill the build skill still carries the run.
+  const splitSkill = defaultSkillFor("plan", skills) ?? buildSkill;
   const account = findClaudeAccount(boot.account ?? undefined);
   if (boot.account && !account) {
     await finish(file, { status: "failed", failed: true, note: `Unknown Claude account ${boot.account}.` });
@@ -59,7 +62,7 @@ export async function runAutorunner(file: string): Promise<void> {
   for (;;) {
     const state = await readAutorunner(file);
     if (!state) return;
-    const project = await readProject(state.localPath);
+    let project = await readProject(state.localPath);
     const runs = await listRuns({ repoKey: state.repoKey, userId: state.userId });
     const runById = new Map(runs.map((r) => [r.id, r]));
     const now = new Date();
@@ -98,6 +101,12 @@ export async function runAutorunner(file: string): Promise<void> {
             reuse: held,
           });
           active.push({ ...story, phase: "review", runId, buildRunId: run.id });
+          continue;
+        }
+        if (story.phase === "split") {
+          // The split merged into the checkout: re-read the backlog so its subtasks can start this tick.
+          // A story left unsplit is not split again; it is built as it is.
+          project = await readProject(state.localPath);
           continue;
         }
         if (story.phase === "build") {
@@ -143,6 +152,8 @@ export async function runAutorunner(file: string): Promise<void> {
     const load = quotaLoad(await readQuota(account?.configDir));
     const allowance = allowanceFor(load, state.mode === "serial" ? 1 : MAX_PARALLEL);
     const throttled = !stopping && allowance === 0;
+    // The plan's limit holds back runs below the mode's full allowance.
+    const limited = !stopping && !throttled && allowance < (state.mode === "serial" ? 1 : MAX_PARALLEL);
     const slots = allowance - active.length;
     const busy = new Set<string>([
       ...active.map((a) => a.number),
@@ -164,7 +175,7 @@ export async function runAutorunner(file: string): Promise<void> {
           failure = `${retry.key}: de branch van de build is weg; de review kan niet opnieuw starten.`;
           continue;
         }
-        const skill = retry.phase === "build" ? buildSkill : reviewSkill;
+        const skill = retry.phase === "build" ? buildSkill : retry.phase === "split" ? splitSkill : reviewSkill;
         const options = { hold: retry.phase === "build" && state.review, reuse: held };
         // A retry after a limit continues the same run; a new run only when that run has no session to continue.
         const start = (extra: { continueRunId?: string }) =>
@@ -186,6 +197,22 @@ export async function runAutorunner(file: string): Promise<void> {
       }
       const fresh = nextStories({ stories: project.stories, graph: project.graph, busy, slots: free });
       for (const story of fresh) {
+        // A large story is split into subtasks first; the subtasks are built, not the story itself.
+        const alreadySplit = state.split ?? [];
+        if (LARGE_COMPLEXITY.has(project.advice.get(story.number)?.complexity ?? "") && !alreadySplit.includes(story.number)) {
+          state.split = [...alreadySplit, story.number];
+          const runId = await startStoryRun(started, state, account, "split", story, project, splitSkill, {
+            prompt: splitPrompt(story),
+          });
+          active.push({
+            key: story.key,
+            number: story.number,
+            phase: "split",
+            runId,
+            models: plannedModels(project.advice.get(story.number)),
+          });
+          continue;
+        }
         const runId = await startStoryRun(started, state, account, "build", story, project, buildSkill, {
           hold: state.review,
         });
@@ -237,6 +264,9 @@ export async function runAutorunner(file: string): Promise<void> {
         failNote ??
         (throttled
           ? `Token-budget vol (${Math.round((load ?? 1) * 100)}%); wacht tot er weer ruimte is.`
+          : null) ??
+        (limited && active.length >= allowance && openLeft.length > active.length
+          ? `Tokens bijna op (${Math.round((load ?? 0) * 100)}%): ${active.length} van maximaal ${allowance} runs draaien, dus er start nu geen nieuwe.`
           : null) ??
         (pending.length > 0 && active.length === 0
           ? `Wacht op de token-limiet; verder om ${new Date(nextWait).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}.`
@@ -292,9 +322,9 @@ async function startStoryRun(
   story: Pick<QueueStory, "number" | "key">,
   project: Project,
   skill: string,
-  options: { hold?: boolean; reuse?: HeldBranch | null; continueRunId?: string } = {},
+  options: { hold?: boolean; reuse?: HeldBranch | null; continueRunId?: string; prompt?: string } = {},
 ): Promise<string> {
-  const kind: AgentRunKind = phase === "build" ? "dev" : "review";
+  const kind: AgentRunKind = phase === "split" ? "plan" : phase === "build" ? "dev" : "review";
   const advice = project.advice.get(story.number);
   const sourcePath = path.join(IMPLEMENTATION, `spec-${story.key}.md`);
   const run = await startRun({
@@ -313,7 +343,7 @@ async function startStoryRun(
     continueRunId: options.continueRunId,
     prompt: options.continueRunId
       ? CONTINUE_PROMPT
-      : buildAgentPrompt({
+      : options.prompt ?? buildAgentPrompt({
           kind,
           skill,
           storyId: story.number,
@@ -343,6 +373,19 @@ function plannedModels(advice: ModelAdviceRow | undefined): PlannedModels {
     dev: recommendedModel("dev", advice),
     review: recommendedModel("review", advice),
   };
+}
+
+/** A large story is split into subtasks before it is built; the parent is then marked split. */
+function splitPrompt(story: Pick<QueueStory, "number" | "key">): string {
+  return [
+    `Split story ${story.number} (${titleFromKey(story.key)}) into smaller stories where its parts can be built apart. Follow the project's story-splitting approach.`,
+    "",
+    "Started from MyBMAD; nobody is watching to answer questions.",
+    `- If the story is already one small piece of work, change nothing and halt with a note that says so.`,
+    `- Otherwise add the subtasks as ${story.number}a, ${story.number}b, … in the backlog, with their dependencies in story-dependencies.yaml and their complexity in story-complexity.md.`,
+    `- Set story ${story.number} to "split" in sprint-status.yaml; its subtasks are the work from now on.`,
+    "- Commit the changes on this branch. Do not implement anything.",
+  ].join("\n");
 }
 
 async function finish(

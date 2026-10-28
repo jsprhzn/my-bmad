@@ -111,7 +111,7 @@ export function retryAt(text: string, now: Date): Date {
   return new Date(now.getTime() + FALLBACK_WAIT_MS);
 }
 
-export type Phase = "build" | "review";
+export type Phase = "split" | "build" | "review";
 
 export interface ActiveStory {
   key: string;
@@ -161,6 +161,8 @@ export interface AutorunnerState {
   done: string[];
   /** Stories stopped by hand from the queue: not taken up again. */
   skipped: string[];
+  /** Large stories already split, or tried: they are built, not split again. */
+  split?: string[];
   /** Every run the queue started, in order: its tokens and cost are summed from these. */
   runIds: string[];
   /** Why the queue is waiting, stopped or failed, for the UI. */
