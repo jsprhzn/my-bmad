@@ -128,9 +128,9 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
     }
   };
 
-  const stop = async (id: string) => {
+  const stop = async (id: string, now: boolean) => {
     setError(null);
-    const result = await stopAutorunner({ owner, name: repo, id });
+    const result = await stopAutorunner({ owner, name: repo, id, now });
     if (result.success) {
       await reload();
     } else {
@@ -144,28 +144,32 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
         <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm">
           <Loader2 className="size-4 animate-spin text-muted-foreground" />
           <div className="min-w-0 flex-1 space-y-0.5">
-            <p className="font-medium">
-              Autorunner draait · {MODE_LABELS[current.mode]}
-              {current.review ? " · met review" : ""}
-            </p>
+            <p className="font-medium">Autorunner draait · {MODE_LABELS[current.mode]}</p>
             <p className="text-muted-foreground">
-              {current.done.length} klaar
-              {current.active.length > 0 &&
-                ` · bezig: ${current.active.map((a) => `${a.key} (${a.phase === "build" ? "bouwen" : "review"})`).join(", ")}`}
-              {current.waiting.length > 0 && ` · wacht op token-limiet`}
+              {current.done.length} klaar · {current.active.length} bezig · {current.runCount} runs uitgevoerd
+              {current.waiting.length > 0 && " · wacht op token-limiet"}
               {!current.driverAlive && " · de runner lijkt te zijn onderbroken"}
             </p>
-            <QueueTotals view={current} now={now} />
             {current.note && <p className="text-muted-foreground">{current.note}</p>}
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void stop(current.id)}
-            disabled={current.stopRequested}
-          >
-            {current.stopRequested ? "Stoppen…" : "Stop autorunner"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void stop(current.id, false)}
+              disabled={current.stopRequested}
+            >
+              {current.stopRequested ? "Stoppen…" : "Stop na huidige"}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => void stop(current.id, true)}
+              disabled={current.stopRequested && current.active.length === 0}
+            >
+              Stop nu
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-3">

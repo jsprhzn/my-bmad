@@ -73,6 +73,8 @@ export async function runAutorunner(file: string): Promise<void> {
         active.push(story);
         continue;
       }
+      // Stopped on purpose ("Stop nu"): neither done nor a failure.
+      if (run.status === "cancelled") continue;
       if (run.status === "completed") {
         if (story.phase === "build") {
           const sprint = project.statusOf.get(story.number) ?? "unknown";

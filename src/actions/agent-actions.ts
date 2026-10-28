@@ -475,9 +475,11 @@ export async function startAutorunner(
 
 /** Ask the autorunner to stop: stories already running finish, no new one starts. */
 export async function stopAutorunner(
-  input: z.infer<typeof repoSchema> & { id: string },
+  input: z.infer<typeof repoSchema> & { id: string; now?: boolean },
 ): Promise<ActionResult<AutorunnerView>> {
-  const parsed = repoSchema.extend({ id: z.string().regex(/^\d{13}-[0-9a-f]{8}$/) }).safeParse(input);
+  const parsed = repoSchema
+    .extend({ id: z.string().regex(/^\d{13}-[0-9a-f]{8}$/), now: z.boolean().optional() })
+    .safeParse(input);
   if (!parsed.success) {
     return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
   }
@@ -488,6 +490,12 @@ export async function stopAutorunner(
     const state = await readAutorunner(file);
     if (!state || state.repoKey !== access.data.repoKey || state.userId !== access.data.userId) {
       return { success: false, error: "Autorunner not found", code: "NOT_FOUND" };
+    }
+    // "Stop nu" also ends the stories that are running; the driver then sees them cancelled.
+    if (parsed.data.now) {
+      for (const story of state.active) {
+        await stopRun(story.runId, access.data);
+      }
     }
     const updated = { ...state, stopRequested: true };
     await writeAutorunner(file, updated);
