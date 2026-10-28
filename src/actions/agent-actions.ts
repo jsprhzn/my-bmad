@@ -73,6 +73,8 @@ const runSchema = repoSchema.extend({
 
 const listSchema = repoSchema.extend({
   storyId: z.string().min(1).max(50).optional(),
+  /** Leave out the running runs an autorunner queue shows itself. */
+  withoutAutorun: z.boolean().optional(),
 });
 
 /**
@@ -217,7 +219,16 @@ export async function listAgentRuns(
       userId: access.data.userId,
       storyId: parsed.data.storyId,
     });
-    return { success: true, data: runs };
+    if (!parsed.data.withoutAutorun) return { success: true, data: runs };
+    const queued = new Set(
+      (await listAutorunners(access.data.repoKey, access.data.userId)).flatMap((state) =>
+        state.active.map((story) => story.runId),
+      ),
+    );
+    return {
+      success: true,
+      data: runs.filter((run) => !(run.status === "running" && queued.has(run.id))),
+    };
   } catch (error) {
     return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
   }
