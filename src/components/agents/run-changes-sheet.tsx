@@ -5,7 +5,8 @@ import { ArrowLeft, GitBranch, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { parseUnifiedDiff, type ChangedFile, type RunChanges } from "@/lib/agents/run-changes";
+import type { ChangedFile, RunChanges } from "@/lib/agents/run-changes";
+import { parseUnifiedDiff } from "@/lib/agents/unified-diff";
 import { getAgentRunChanges, getAgentRunFileDiff } from "@/actions/agent-actions";
 
 /** Reload the changes this often while the run is going. */
