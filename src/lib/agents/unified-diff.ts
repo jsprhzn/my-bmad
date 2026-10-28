@@ -53,3 +53,17 @@ export function parseUnifiedDiff(diff: string): DiffHunk[] {
   }
   return hunks;
 }
+
+/**
+ * The content of a file the diff adds in full, or null when the diff only shows part of the file. A markdown
+ * file can then be shown as rendered text.
+ */
+export function addedFileContent(diff: string): string | null {
+  const hunks = parseUnifiedDiff(diff);
+  if (hunks.length !== 1) return null;
+  const lines = hunks[0].lines;
+  if (lines.length === 0 || lines.some((line) => line.kind !== "add") || lines[0].newNumber !== 1) {
+    return null;
+  }
+  return lines.map((line) => line.text).join("\n");
+}
