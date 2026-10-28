@@ -7,6 +7,7 @@ import type { ModelTier } from "@/lib/bmad/types";
 import type { AgentRunKind } from "./models";
 import { formatStream, readSessionId, readStreamResult } from "./stream-format";
 import { agentEnvironment } from "./environment";
+import { currentBranch } from "./run-changes";
 
 /**
  * Agent runs: Claude Code started headless in a local project's folder.
@@ -51,6 +52,12 @@ export interface AgentRun {
   parentRunId?: string | null;
   /** Paused with SIGSTOP; resumed with SIGCONT. */
   paused?: boolean;
+  /** The build's own branch; null for runs that work in the checkout itself. */
+  branch?: string | null;
+  /** The branch the build's branch was cut from. */
+  baseBranch?: string | null;
+  /** The build finished but its branch is kept for the review; it merges when the review does. */
+  held?: boolean;
 }
 
 /** Runs Claude Code headless; nobody is there to answer a permission prompt. */
@@ -95,6 +102,20 @@ async function readText(file: string): Promise<string> {
 }
 
 /** Bring a running record up to date from its files and process. */
+/** The branch a build run works on: agent/{story}-{run id}. */
+export function branchName(storyId: string, runId: string): string {
+  return `agent/${storyId.replace(/[^A-Za-z0-9._-]/g, "-")}-${runId}`;
+}
+
+/**
+ * Runs from before the record kept the branch: a build without a resumed
+ * session always got its own branch, named after the run.
+ */
+function withBranch(run: AgentRun): AgentRun {
+  if (run.branch !== undefined || run.kind !== "dev" || run.parentRunId) return run;
+  return { ...run, branch: branchName(run.storyId, run.id), baseBranch: run.baseBranch ?? null };
+}
+
 async function refreshRun(run: AgentRun): Promise<AgentRun> {
   if (run.status !== "running") return run;
 
@@ -105,7 +126,8 @@ async function refreshRun(run: AgentRun): Promise<AgentRun> {
   const exitCode = exitText ? Number.parseInt(exitText, 10) : null;
   // Only a build that was merged into the checkout counts as done.
   const mergeText = (await readText(runFile(run.id, "merge.txt"))).trim();
-  const merged = mergeText === "" || mergeText === "merged";
+  const held = mergeText === "held";
+  const merged = mergeText === "" || mergeText === "merged" || held;
   const updated: AgentRun = {
     ...run,
     endedAt: run.endedAt ?? new Date().toISOString(),
@@ -117,6 +139,7 @@ async function refreshRun(run: AgentRun): Promise<AgentRun> {
   };
   if (exitCode === 0 && result && !result.isError && merged) {
     updated.status = "completed";
+    updated.held = held;
   } else {
     updated.status = "failed";
     updated.error =
@@ -190,6 +213,8 @@ export function mergeScript(p: {
   conflictLog: string;
   /** Agent that commits what a build left uncommitted, reading finishPrompt from this file. */
   finishPromptFile?: string;
+  /** Set the story's sprint status on the branch, as a build or review does. Default true. */
+  setStatus?: boolean;
 }): string {
   return [
     "#!/bin/sh",
@@ -233,7 +258,7 @@ export function mergeScript(p: {
     '  sed "s/^  $KEY: .*/  $KEY: $NEW/" "$F" > "$F.tmp" && mv "$F.tmp" "$F"',
     '  git -C "$WORKTREE" add -- "$SPRINT" && { git -C "$WORKTREE" diff --cached --quiet || git -C "$WORKTREE" commit -q -m "chore: set $KEY to $NEW in sprint-status"; }',
     '}',
-    'set_story_status',
+    ...(p.setStatus === false ? [] : ["set_story_status"]),
     // A rebase still stopped on a conflict, so the agent has work to do.
     'rebasing() { [ -d "$(git -C "$WORKTREE" rev-parse --path-format=absolute --git-path rebase-merge)" ] || [ -d "$(git -C "$WORKTREE" rev-parse --path-format=absolute --git-path rebase-apply)" ]; }',
     'resolve_conflicts() {',
@@ -307,6 +332,18 @@ export interface StartRunInput {
   resumeSessionId?: string;
   /** The run this reply answers. */
   parentRunId?: string;
+  /** Keep a build's branch for its review instead of merging it. */
+  hold?: boolean;
+  /** Work on this held build's branch and worktree, instead of a new branch. */
+  reuseBuild?: HeldBranch;
+}
+
+/** A build's branch kept for its review. */
+export interface HeldBranch {
+  /** The build run that made the branch. */
+  runId: string;
+  branch: string;
+  baseBranch: string | null;
 }
 
 export async function startRun(input: StartRunInput): Promise<AgentRun> {
@@ -320,24 +357,32 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
   const agentCommand = template
     .replaceAll("{model}", input.model)
     .replaceAll("{permission_mode}", input.permissionMode) + resume;
-  // A new build gets its own worktree and branch, so parallel builds stay apart
-  // and the checkout stays clean. Resumed replies keep working where they ran.
-  const isolated =
-    input.kind === "dev" && !input.resumeSessionId && existsSync(path.join(input.localPath, ".git"));
-  const worktree = path.join(runsDir(), `${id}.worktree`);
-  const branch = `agent/${input.storyId.replace(/[^A-Za-z0-9._-]/g, "-")}-${id}`;
+  // Builds, plans and reviews each work on a branch of their own, in a worktree,
+  // so the checkout stays clean. A review of a held build works on that build's
+  // branch. Resumed replies keep working where they ran.
+  const isolated = !input.resumeSessionId && existsSync(path.join(input.localPath, ".git"));
+  const reuse = input.reuseBuild ?? null;
+  const worktree = reuse
+    ? path.join(runsDir(), `${reuse.runId}.worktree`)
+    : path.join(runsDir(), `${id}.worktree`);
+  const branch = reuse ? reuse.branch : branchName(input.storyId, id);
   const mergeResult = runFile(id, "merge.txt");
   // The wait is in the detached shell, so a serial run still starts after a restart of MyBMAD.
   const waitFor = (input.waitForPids ?? []).filter((pid) => Number.isInteger(pid) && pid > 0);
+  const hold = isolated && input.hold === true;
   const script = [
     ...(waitFor.length > 0
       ? [`for pid in ${waitFor.join(" ")}; do while kill -0 "$pid" 2>/dev/null; do sleep 10; done; done`]
       : []),
     ...(isolated
       ? [
-          // First, so the branch is cut from a checkout that already says in-progress.
-          `sh ${shQuote(runFile(id, "start.sh"))}`,
-          `git -C ${shQuote(input.localPath)} worktree add -q -b ${shQuote(branch)} ${shQuote(worktree)} HEAD || { echo ${shQuote("Niet gestart: geen werkboom voor de run.")} > ${shQuote(mergeResult)}; echo 1 > ${shQuote(runFile(id, "exit"))}; exit 1; }`,
+          // A build sets its story in-progress first, so the branch is cut from a checkout that says so.
+          ...(input.kind === "dev" ? [`sh ${shQuote(runFile(id, "start.sh"))}`] : []),
+          ...(reuse
+            ? []
+            : [
+                `git -C ${shQuote(input.localPath)} worktree add -q -b ${shQuote(branch)} ${shQuote(worktree)} HEAD || { echo ${shQuote("Niet gestart: geen werkboom voor de run.")} > ${shQuote(mergeResult)}; echo 1 > ${shQuote(runFile(id, "exit"))}; exit 1; }`,
+              ]),
           `cd ${shQuote(worktree)}`,
         ]
       : []),
@@ -346,7 +391,10 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
     isolated
       ? [
           "rc=$?",
-          `if [ $rc -eq 0 ]; then sh ${shQuote(runFile(id, "merge.sh"))}; rc=$?; fi`,
+          // A held build keeps its branch for the review; its result is written, not merged.
+          hold
+            ? `if [ $rc -eq 0 ]; then echo held > ${shQuote(mergeResult)}; fi`
+            : `if [ $rc -eq 0 ]; then sh ${shQuote(runFile(id, "merge.sh"))}; rc=$?; fi`,
           `echo $rc > ${shQuote(runFile(id, "exit"))}`,
         ].join("; ")
       : `echo $? > ${shQuote(runFile(id, "exit"))}`,
@@ -367,6 +415,8 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
         branch,
         result: mergeResult,
         storyPrefix,
+        // A plan only writes the spec: the sprint status it sets stays as the plan left it.
+        setStatus: input.kind !== "plan",
         // Resolves conflicts with the same account and model as the build, without resuming its session.
         resolveCommand: template.replaceAll("{model}", input.model),
         conflictPromptFile,
@@ -409,6 +459,9 @@ export async function startRun(input: StartRunInput): Promise<AgentRun> {
     numTurns: null,
     error: null,
     parentRunId: input.parentRunId ?? null,
+    branch: isolated ? branch : null,
+    baseBranch: isolated ? (reuse?.baseBranch ?? (await currentBranch(input.localPath))) : null,
+    held: hold || undefined,
   };
   await saveRun(run);
   return run;
@@ -428,7 +481,7 @@ export async function listRuns(filter: {
       const run = JSON.parse(await readFile(path.join(runsDir(), file), "utf8")) as AgentRun;
       if (run.repoKey !== filter.repoKey || run.userId !== filter.userId) continue;
       if (filter.storyId && run.storyId !== filter.storyId) continue;
-      runs.push(await refreshRun(run));
+      runs.push(withBranch(await refreshRun(run)));
     } catch {
       // A half-written or foreign file: skip it.
     }
@@ -443,7 +496,7 @@ export async function getRun(
   if (!RUN_ID.test(id) || !existsSync(runFile(id, "json"))) return null;
   const stored = JSON.parse(await readFile(runFile(id, "json"), "utf8")) as AgentRun;
   if (stored.repoKey !== owner.repoKey || stored.userId !== owner.userId) return null;
-  const run = await refreshRun(stored);
+  const run = withBranch(await refreshRun(stored));
   const jsonl = await readText(runFile(id, "jsonl"));
   const prompt = await readText(runFile(id, "prompt.txt"));
   const own = await ownLog(run, jsonl);

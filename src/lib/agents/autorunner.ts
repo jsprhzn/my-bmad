@@ -25,7 +25,7 @@ import { buildAgentPrompt } from "./prompts";
 import { listProjectSkills } from "./project-skills";
 import { recommendedModel, type AgentRunKind } from "./models";
 import type { PlannedModels } from "./run-stages";
-import { listRuns, startRun } from "./run-store";
+import { listRuns, runsDir, startRun, type AgentRun, type HeldBranch } from "./run-store";
 import { allowanceFor, quotaLoad, readQuota } from "./quota";
 
 const TICK_MS = 15_000;
@@ -82,6 +82,23 @@ export async function runAutorunner(file: string): Promise<void> {
         continue;
       }
       if (run.status === "completed") {
+        if (story.phase === "build" && run.held) {
+          // The build's branch is kept: its review works on it and merges it, which sets the sprint status.
+          const held = heldBranch(run);
+          if (!held) {
+            failure = `${story.key}: de build heeft geen branch om te reviewen.`;
+            continue;
+          }
+          if (await buildBlocked(run, story)) {
+            failure = `${story.key}: de build is geblokkeerd.`;
+            continue;
+          }
+          const runId = await startStoryRun(started, state, account, "review", story, project, reviewSkill, {
+            reuse: held,
+          });
+          active.push({ ...story, phase: "review", runId, buildRunId: run.id });
+          continue;
+        }
         if (story.phase === "build") {
           const sprint = project.statusOf.get(story.number) ?? "unknown";
           if (sprint === "blocked" || (sprint !== "review" && sprint !== "done")) {
@@ -111,6 +128,7 @@ export async function runAutorunner(file: string): Promise<void> {
           phase: story.phase,
           at: retryAt(text, now).toISOString(),
           attempts,
+          buildRunId: story.buildRunId,
         });
         continue;
       }
@@ -138,13 +156,29 @@ export async function runAutorunner(file: string): Promise<void> {
         if (free <= 0) break;
         const story = project.stories.find((s) => s.number === retry.number);
         if (!story) continue;
-        const runId = await startStoryRun(started, state, account, retry.phase, story, project, retry.phase === "build" ? buildSkill : reviewSkill);
+        // A review retry goes on the held build's branch; without it there is nothing to review.
+        const held = retry.phase === "review" && retry.buildRunId ? heldBranch(runById.get(retry.buildRunId)) : null;
+        if (retry.phase === "review" && retry.buildRunId && !held) {
+          failure = `${retry.key}: de branch van de build is weg; de review kan niet opnieuw starten.`;
+          continue;
+        }
+        const runId = await startStoryRun(
+          started,
+          state,
+          account,
+          retry.phase,
+          story,
+          project,
+          retry.phase === "build" ? buildSkill : reviewSkill,
+          { hold: retry.phase === "build" && state.review, reuse: held },
+        );
         active.push({
           key: story.key,
           number: story.number,
           phase: retry.phase,
           runId,
           models: plannedModels(project.advice.get(story.number)),
+          buildRunId: retry.buildRunId,
         });
         waiting.splice(waiting.findIndex((w) => w.number === retry.number), 1);
         busy.add(story.number);
@@ -152,7 +186,9 @@ export async function runAutorunner(file: string): Promise<void> {
       }
       const fresh = nextStories({ stories: project.stories, graph: project.graph, busy, slots: free });
       for (const story of fresh) {
-        const runId = await startStoryRun(started, state, account, "build", story, project, buildSkill);
+        const runId = await startStoryRun(started, state, account, "build", story, project, buildSkill, {
+          hold: state.review,
+        });
         active.push({
           key: story.key,
           number: story.number,
@@ -235,6 +271,18 @@ async function readText(file: string): Promise<string> {
   return existsSync(file) ? readFile(file, "utf8") : "";
 }
 
+/** A held build's branch, for the review that works on it. */
+function heldBranch(run: AgentRun | undefined): HeldBranch | null {
+  if (!run?.held || !run.branch) return null;
+  return { runId: run.id, branch: run.branch, baseBranch: run.baseBranch ?? null };
+}
+
+/** Whether the build left its result as blocked, in its worktree. */
+async function buildBlocked(run: AgentRun, story: Pick<QueueStory, "key">): Promise<boolean> {
+  const result = path.join(runsDir(), `${run.id}.worktree`, IMPLEMENTATION, `bmad-build-auto-result-${story.key}.md`);
+  return /^status: blocked/m.test(await readText(result));
+}
+
 /** Start one build or review run for a story, in auto mode, and return its run id. */
 async function startStoryRun(
   started: string[],
@@ -244,6 +292,7 @@ async function startStoryRun(
   story: Pick<QueueStory, "number" | "key">,
   project: Project,
   skill: string,
+  options: { hold?: boolean; reuse?: HeldBranch | null } = {},
 ): Promise<string> {
   const kind: AgentRunKind = phase === "build" ? "dev" : "review";
   const advice = project.advice.get(story.number);
@@ -259,6 +308,8 @@ async function startStoryRun(
     model: recommendedModel(kind, advice),
     account,
     permissionMode: "auto",
+    hold: options.hold,
+    reuseBuild: options.reuse ?? undefined,
     prompt: buildAgentPrompt({
       kind,
       skill,
