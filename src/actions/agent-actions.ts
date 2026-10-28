@@ -535,6 +535,7 @@ export async function stopAgentRun(
 const autorunnerStartSchema = repoSchema.extend({
   mode: z.enum(["serial", "parallel"]),
   review: z.boolean(),
+  keepAwake: z.boolean(),
 });
 
 /** The queue's state as the page shows it: whether its driver is still alive. */
@@ -543,7 +544,7 @@ export interface AutorunnerStoryView {
   key: string;
   number: string;
   title: string;
-  phase: "build" | "review";
+  phase: "split" | "build" | "review";
   runId: string;
   /** The run whose changes the story shows: the build's own branch, also during its review. */
   changesRunId: string;
@@ -690,7 +691,7 @@ export async function startAutorunner(
     // Detached, so it keeps running when this request ends or MyBMAD restarts.
     const child = spawn(
       path.join(process.cwd(), "node_modules", ".bin", "tsx"),
-      [path.join(process.cwd(), "scripts", "autorunner.ts"), file],
+      [path.join(process.cwd(), "scripts", "autorunner.ts"), file, parsed.data.keepAwake ? "keep-awake" : ""],
       { cwd: process.cwd(), detached: true, stdio: "ignore", env: process.env },
     );
     child.unref();

@@ -78,8 +78,9 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
   const [views, setViews] = useState<AutorunnerView[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<AutorunnerView["mode"]>("serial");
+  const [mode, setMode] = useState<AutorunnerView["mode"]>("parallel");
   const [review, setReview] = useState(true);
+  const [keepAwake, setKeepAwake] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,7 +112,7 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
   const start = async () => {
     setPending(true);
     setError(null);
-    const result = await startAutorunner({ owner, name: repo, mode, review });
+    const result = await startAutorunner({ owner, name: repo, mode, review, keepAwake });
     setPending(false);
     if (result.success) {
       setOpen(false);
@@ -200,7 +201,7 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
             <DialogTrigger asChild>
               <Button variant="outline">
                 <Bot className="size-4" />
-                Autorunner starten
+                Autorunner starten…
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -245,6 +246,21 @@ export function AutorunnerControl({ owner, repo }: { owner: string; repo: string
                     <span className="font-medium">Review na elke build</span>
                     <span className="block text-muted-foreground">
                       Een review-run die fouten zelf oplost. Kost extra tijd en tokens.
+                    </span>
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-3">
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={keepAwake}
+                    onCheckedChange={(checked) => setKeepAwake(checked === true)}
+                    disabled={pending}
+                  />
+                  <span>
+                    <span className="font-medium">Computer wakker houden</span>
+                    <span className="block text-muted-foreground">
+                      Voorkomt dat de Mac in slaap gaat zolang de autorunner draait. Een dichtgeklapte laptop slaapt nog steeds.
                     </span>
                   </span>
                 </label>

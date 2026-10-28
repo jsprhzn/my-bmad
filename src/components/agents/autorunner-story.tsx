@@ -125,7 +125,7 @@ export function AutorunnerStoryRow({
               </p>
             )}
             <Button variant="outline" size="sm" className="shrink-0" onClick={() => setChangesOpen(true)}>
-              Context
+              Context…
             </Button>
           </div>
         </div>
@@ -171,7 +171,7 @@ export function AutorunnerStoryRow({
 
       <div className="flex flex-wrap justify-between gap-2">
         <Button variant="outline" size="sm" onClick={() => setLogOpen(true)}>
-          Volledige log
+          Volledige log…
         </Button>
         <div className="flex gap-2">
           <Button
