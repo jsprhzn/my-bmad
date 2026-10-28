@@ -51,7 +51,7 @@ export default async function DocumentatiePage({ params }: DocumentatiePageProps
         </p>
       </div>
       {page?.success ? (
-        <DocumentatieView html={page.data.body} title="Documentatie" />
+        <DocumentatieView owner={owner} repo={repoName} indexPath={indexPath!} html={page.data.body} />
       ) : (
         <div
           className="flex items-center justify-center h-64 text-muted-foreground"
