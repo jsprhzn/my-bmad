@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, GitBranch, Loader2 } from "lucide-react";
+import { ArrowLeft, FileText, GitBranch, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { ChangedFile, RunChanges } from "@/lib/agents/run-changes";
 import { parseUnifiedDiff } from "@/lib/agents/unified-diff";
-import { getAgentRunChanges, getAgentRunFileDiff } from "@/actions/agent-actions";
+import { getAgentRunChanges, getAgentRunFileDiff, getStoryArtifacts } from "@/actions/agent-actions";
+import { fetchFileContent } from "@/actions/repo-actions";
+import { MarkdownRenderer } from "@/components/docs/markdown-renderer";
 
 /** Reload the changes this often while the run is going. */
 const POLL_MS = 10000;
@@ -81,13 +83,15 @@ function DiffView({ diff }: { diff: string }) {
 }
 
 /**
- * The files a run changed on its branch, opened from the right. Clicking a
- * file shows its diff; the list keeps updating while the run goes.
+ * The context of a run, opened from the right: the files its branch changed,
+ * the story's artifacts, and the diff of a changed file. The changes keep
+ * updating while the run goes.
  */
 export function RunChangesSheet({
   owner,
   repo,
   runId,
+  storyNumber,
   title,
   open,
   onOpenChange,
@@ -95,6 +99,8 @@ export function RunChangesSheet({
   owner: string;
   repo: string;
   runId: string | null;
+  /** The story's number, e.g. "11.1"; its artifacts are listed when given. */
+  storyNumber?: string;
   title: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -105,6 +111,25 @@ export function RunChangesSheet({
   const [selected, setSelected] = useState<string | null>(null);
   const [diff, setDiff] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
+  const [artifacts, setArtifacts] = useState<string[]>([]);
+  const [artifact, setArtifact] = useState<{ path: string; content: string | null } | null>(null);
+
+  useEffect(() => {
+    if (!open || !storyNumber) return;
+    let alive = true;
+    void getStoryArtifacts({ owner, name: repo, storyNumber }).then((result) => {
+      if (alive && result.success) setArtifacts(result.data);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [open, owner, repo, storyNumber]);
+
+  const openArtifact = async (path: string) => {
+    setArtifact({ path, content: null });
+    const result = await fetchFileContent({ owner, name: repo, path });
+    setArtifact({ path, content: result.success ? result.data.content : result.error });
+  };
 
   useEffect(() => {
     if (!open || !runId) return;
@@ -146,6 +171,7 @@ export function RunChangesSheet({
     if (!next) {
       setSelected(null);
       setDiff(null);
+      setArtifact(null);
     }
   };
 
@@ -157,7 +183,7 @@ export function RunChangesSheet({
     <Sheet open={open} onOpenChange={close}>
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle>Wijzigingen</SheetTitle>
+          <SheetTitle>Context</SheetTitle>
           <SheetDescription className="truncate">{title}</SheetDescription>
           {loaded?.branch && (
             <p className="flex min-w-0 items-center gap-1.5 font-mono text-xs text-muted-foreground">
@@ -177,27 +203,28 @@ export function RunChangesSheet({
             </p>
           )}
 
-          {!loaded && !error && (
+          {artifact === null && !loaded && !error && (
             <p className="flex items-center gap-2 text-muted-foreground">
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               Wijzigingen laden…
             </p>
           )}
 
-          {loaded?.state === "no-branch" && (
+          {artifact === null && loaded?.state === "no-branch" && (
             <p className="text-muted-foreground">
               Deze run werkt in de hoofdwerkboom en heeft geen eigen branch. Er is dus geen aparte lijst van wijzigingen.
             </p>
           )}
 
-          {loaded?.state === "merged" && (
+          {artifact === null && loaded?.state === "merged" && (
             <p className="text-muted-foreground">
               De branch is samengevoegd en opgeruimd. De wijzigingen staan nu in de basisbranch.
             </p>
           )}
 
-          {loaded?.state === "ready" && selected === null && (
+          {artifact === null && loaded?.state === "ready" && selected === null && (
             <>
+              <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Wijzigingen</h3>
               <div className="flex flex-wrap gap-2">
                 {(Object.keys(FILTER_LABELS) as Filter[]).map((key) => {
                   const count = key === "all" ? loaded.files.length : counts(key);
@@ -240,7 +267,47 @@ export function RunChangesSheet({
             </>
           )}
 
-          {selected !== null && (
+          {artifact === null && selected === null && artifacts.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Artifacts</h3>
+              <ul className="divide-y rounded-md border">
+                {artifacts.map((path) => (
+                  <li key={path}>
+                    <button
+                      type="button"
+                      onClick={() => void openArtifact(path)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/50"
+                    >
+                      <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate font-mono text-xs">{path.split("/").pop()}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {artifact && (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => setArtifact(null)}>
+                <ArrowLeft className="size-4" aria-hidden="true" />
+                Terug
+              </Button>
+              <p className="font-mono text-xs break-all">{artifact.path}</p>
+              {artifact.content === null ? (
+                <p className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  Laden…
+                </p>
+              ) : artifact.path.endsWith(".md") ? (
+                <MarkdownRenderer content={artifact.content} filePath={artifact.path} />
+              ) : (
+                <pre className="whitespace-pre-wrap font-mono text-xs">{artifact.content}</pre>
+              )}
+            </>
+          )}
+
+          {artifact === null && selected !== null && (
             <>
               <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>
                 <ArrowLeft className="size-4" aria-hidden="true" />

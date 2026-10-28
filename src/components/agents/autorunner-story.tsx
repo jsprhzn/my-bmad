@@ -113,37 +113,19 @@ export function AutorunnerStoryRow({
             {phaseLabel} · gestart {formatTime(story.startedAt)}
             {story.paused && " · gepauzeerd"}
           </p>
+        </div>
+        <div className="flex min-w-0 flex-col items-end gap-2">
           {story.branch && (
-            <p className="flex min-w-0 items-center gap-1 font-mono text-xs text-muted-foreground">
+            <p className="flex max-w-full min-w-0 items-center gap-1 font-mono text-xs text-primary">
               <GitBranch className="size-3.5 shrink-0" aria-hidden="true" />
               <span className="truncate">{story.branch}</span>
             </p>
           )}
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setChangesOpen(true)}>
-            Wijzigingen
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={pending}
-            onClick={() =>
-              void act(() =>
-                setAgentRunPaused({ owner, name: repo, runId: story.runId, paused: !story.paused }),
-              )
-            }
-          >
-            {story.paused ? "Hervatten" : "Pauzeren"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={pending}
-            onClick={() => void act(() => stopAgentRun({ owner, name: repo, runId: story.runId }))}
-          >
-            Stoppen
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setChangesOpen(true)}>
+              Context
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -159,10 +141,34 @@ export function AutorunnerStoryRow({
         </p>
       )}
 
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={pending}
+          onClick={() =>
+            void act(() =>
+              setAgentRunPaused({ owner, name: repo, runId: story.runId, paused: !story.paused }),
+            )
+          }
+        >
+          {story.paused ? "Hervatten" : "Pauzeren"}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={pending}
+          onClick={() => void act(() => stopAgentRun({ owner, name: repo, runId: story.runId }))}
+        >
+          Stoppen
+        </Button>
+      </div>
+
       <RunChangesSheet
         owner={owner}
         repo={repo}
         runId={story.runId}
+        storyNumber={story.number}
         title={`${story.number} · ${story.title}`}
         open={changesOpen}
         onOpenChange={setChangesOpen}
