@@ -80,6 +80,27 @@ describe("nextStories", () => {
     expect(picked.map((s) => s.number)).toEqual(["1.4", "2.1"]);
   });
 
+  it("keeps a subtask's own number apart from its parent's", () => {
+    const split = readSprintStories(
+      "development_status:\n  6-3a-pain-001-xml: split\n  6-3aa-payment-storage: backlog\n  6-3ab-xsds: backlog\n",
+    );
+    expect(split.map((s) => [s.number, s.status])).toEqual([
+      ["6.3a", "split"],
+      ["6.3aa", "backlog"],
+      ["6.3ab", "backlog"],
+    ]);
+  });
+
+  it("starts the subtasks of a split story: a split need counts as met", () => {
+    const split = [
+      { number: "6.3a", key: "6-3a-pain-001-xml", status: "split" },
+      { number: "6.3aa", key: "6-3aa-payment-storage", status: "backlog" },
+    ];
+    const graph = parseStoryDependencies("epic-6:\n  6-3a-pain-001-xml:\n  6-3aa-payment-storage:\n    - 6-3a-pain-001-xml\n");
+    const picked = nextStories({ stories: split, graph, busy: new Set(), slots: 3 });
+    expect(picked.map((s) => s.number)).toEqual(["6.3aa"]);
+  });
+
   it("treats a need missing from sprint-status as not done", () => {
     const partial = stories.filter((s) => s.number !== "1.1");
     const picked = nextStories({ stories: partial, graph: GRAPH, busy: new Set(), slots: 3 });
@@ -135,7 +156,7 @@ describe("decisionNote", () => {
         { key: "4-1d", large: true, retry: false },
       ],
     });
-    expect(note).toBe("2 runs: groot: 8-3, 4-1d; tokens op 30%.");
+    expect(note).toBe("2 runs: large: 8-3, 4-1d.");
   });
 
   it("says when tokens are nearly used up", () => {
@@ -147,17 +168,17 @@ describe("decisionNote", () => {
       active: [{ key: "8-3", large: false, retry: false }],
       openLeft: 3,
     });
-    expect(note).toBe("1 run: tokens bijna op (80%), max 2 tegelijk; de overige open stories wachten op afhankelijkheden.");
+    expect(note).toBe("1 run: tokens nearly used up (80%), at most 2 at once; other open stories wait on dependencies.");
   });
 
   it("says when a failed story is tried again first", () => {
     const note = decisionNote({ ...base, active: [{ key: "8-2", large: false, retry: true }] });
-    expect(note).toBe("1 run: eerst opnieuw: 8-2; tokens op 30%.");
+    expect(note).toBe("1 run: retrying first: 8-2.");
   });
 
   it("says when it waits for the token limit with nothing running", () => {
     const note = decisionNote({ ...base, active: [], waitingAt: "12:30" });
-    expect(note).toBe("Wacht op de tokenlimiet; verder om 12:30.");
+    expect(note).toBe("Waiting for the token limit; continuing at 12:30.");
   });
 });
 

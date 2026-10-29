@@ -1,4 +1,7 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 /**
  * The files a build run changed on its branch, read from the project's git
@@ -94,12 +97,37 @@ function rangeOf(baseBranch: string, branch: string): string {
   return `${baseBranch}...${branch}`;
 }
 
+/**
+ * The changes of a build that is still running: its worktree, committed or
+ * not. The branch only has the commits the build has made so far.
+ */
+async function worktreeChanges(worktree: string, base: string): Promise<RunChanges> {
+  const [nameStatus, numstat, untracked] = await Promise.all([
+    git(worktree, ["diff", "--no-renames", "--name-status", base]),
+    git(worktree, ["diff", "--no-renames", "--numstat", base]),
+    git(worktree, ["ls-files", "--others", "--exclude-standard"]),
+  ]);
+  const added = untracked.split("\n").filter(Boolean);
+  return {
+    state: "ready",
+    files: parseChanges(
+      [nameStatus, ...added.map((file) => `A\t${file}`)].filter(Boolean).join("\n"),
+      [numstat, ...added.map((file) => `-\t-\t${file}`)].filter(Boolean).join("\n"),
+    ),
+  };
+}
+
 export async function runChanges(input: {
   checkout: string;
   branch: string | null | undefined;
   baseBranch: string | null | undefined;
+  /** The build's worktree, while the build runs. */
+  worktree?: string | null;
 }): Promise<RunChanges> {
   if (!input.branch) return { state: "no-branch" };
+  if (input.worktree && existsSync(input.worktree)) {
+    return worktreeChanges(input.worktree, input.baseBranch ?? "HEAD");
+  }
   if (!(await branchExists(input.checkout, input.branch))) return { state: "merged" };
   const range = rangeOf(input.baseBranch ?? "HEAD", input.branch);
   const [nameStatus, numstat] = await Promise.all([
@@ -107,6 +135,17 @@ export async function runChanges(input: {
     git(input.checkout, ["diff", "--no-renames", "--numstat", range]),
   ]);
   return { state: "ready", files: parseChanges(nameStatus, numstat) };
+}
+
+/** The diff of one file of a running build's worktree, committed or not. */
+async function worktreeFileDiff(worktree: string, base: string, file: string): Promise<string> {
+  const diff = await git(worktree, ["diff", "--no-renames", base, "--", file]);
+  if (diff) return diff.length > MAX_DIFF_BYTES ? `${diff.slice(0, MAX_DIFF_BYTES)}\n… truncated` : diff;
+  // An untracked file has nothing to diff against: show all of it as added.
+  const untracked = (await git(worktree, ["ls-files", "--others", "--exclude-standard", "--", file])).trim();
+  if (!untracked) return "";
+  const lines = (await readFile(path.join(worktree, file), "utf8")).split("\n");
+  return `@@ -0,0 +1,${lines.length} @@\n${lines.map((line) => `+${line}`).join("\n")}\n`;
 }
 
 /**
@@ -117,12 +156,16 @@ export async function runFileDiff(input: {
   checkout: string;
   branch: string;
   baseBranch: string | null | undefined;
+  worktree?: string | null;
   path: string;
 }): Promise<string | null> {
   const changes = await runChanges(input);
   if (changes.state !== "ready") return null;
   if (!changes.files.some((file) => file.path === input.path)) return null;
+  if (input.worktree && existsSync(input.worktree)) {
+    return worktreeFileDiff(input.worktree, input.baseBranch ?? "HEAD", input.path);
+  }
   const range = rangeOf(input.baseBranch ?? "HEAD", input.branch);
   const diff = await git(input.checkout, ["diff", "--no-renames", range, "--", input.path]);
-  return diff.length > MAX_DIFF_BYTES ? `${diff.slice(0, MAX_DIFF_BYTES)}\n… afgekapt` : diff;
+  return diff.length > MAX_DIFF_BYTES ? `${diff.slice(0, MAX_DIFF_BYTES)}\n… truncated` : diff;
 }

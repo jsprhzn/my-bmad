@@ -29,6 +29,8 @@ export interface QueueStory {
 const OPEN = new Set(["backlog", "ready-for-dev"]);
 /** A story a failed or stopped run left in progress: picked up again, unless a run is still on it. */
 const LEFT_BEHIND = new Set(["in-progress"]);
+/** A need counts as met when it is done, or split: a split story is worked on through its subtasks. */
+const MET = new Set(["done", "split"]);
 
 /** Whether the queue may start this story: it is open, or a run left it in progress. */
 export function canStart(status: string): boolean {
@@ -81,7 +83,7 @@ export function nextStories(input: {
     if (!canStart(story.status) || input.busy.has(story.number)) continue;
     const needs = requiredStories(story.number, input.graph);
     // A need that is missing from sprint-status counts as not done: never start blind.
-    if ([...needs].some((need) => statusOf.get(need) !== "done")) continue;
+    if ([...needs].some((need) => !MET.has(statusOf.get(need) ?? ""))) continue;
     const related = taken.some(
       (other) =>
         needs.has(other) || requiredStories(other, input.graph).has(story.number),
@@ -133,19 +135,18 @@ export interface DecisionInput {
 export function decisionNote(input: DecisionInput): string | null {
   if (input.failure) return input.failure;
   const pct = input.load === null ? null : Math.round(input.load * 100);
-  if (input.throttled) return `Tokens op (${pct ?? 100}%): geen nieuwe run tot er weer ruimte is.`;
-  if (input.active.length === 0 && input.waitingAt) return `Wacht op de tokenlimiet; verder om ${input.waitingAt}.`;
+  if (input.throttled) return `Token budget at ${pct ?? 100}%: no new run until there is room again.`;
+  if (input.active.length === 0 && input.waitingAt) return `Waiting for the token limit; continuing at ${input.waitingAt}.`;
   if (input.active.length === 0) return null;
   const why: string[] = [];
   const retries = input.active.filter((a) => a.retry).map((a) => a.key);
-  if (retries.length > 0) why.push(`eerst opnieuw: ${retries.join(", ")}`);
+  if (retries.length > 0) why.push(`retrying first: ${retries.join(", ")}`);
   const large = input.active.filter((a) => a.large).map((a) => a.key);
-  if (large.length > 0) why.push(`groot: ${large.join(", ")}`);
-  if (input.limited) why.push(`tokens bijna op (${pct}%), max ${input.allowance} tegelijk`);
-  else if (input.mode === "serial") why.push("serieel ingesteld");
-  else if (pct !== null) why.push(`tokens op ${pct}%`);
+  if (large.length > 0) why.push(`large: ${large.join(", ")}`);
+  if (input.limited) why.push(`tokens nearly used up (${pct}%), at most ${input.allowance} at once`);
+  else if (input.mode === "serial") why.push("serial mode");
   if (input.active.length < input.allowance && input.openLeft > input.active.length) {
-    why.push("de overige open stories wachten op afhankelijkheden");
+    why.push("other open stories wait on dependencies");
   }
   const count = `${input.active.length} ${input.active.length === 1 ? "run" : "runs"}`;
   return why.length > 0 ? `${count}: ${why.join("; ")}.` : `${count}.`;

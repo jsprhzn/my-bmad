@@ -30,6 +30,7 @@ import {
   isAlive,
   listRuns,
   readRunStream,
+  runsDir,
   setRunPaused,
   startRun,
   stopRun,
@@ -131,7 +132,7 @@ export async function startAgentRun(
   if (await isSplitStory(localPath, storyId)) {
     return {
       success: false,
-      error: `Story ${storyId} is opgesplitst in subtaken. Start een subtaak (bijvoorbeeld ${storyId}a) in plaats daarvan.`,
+      error: `Story ${storyId} is split into subtasks. Start a subtask (for example ${storyId}a) instead.`,
       code: "VALIDATION_ERROR",
     };
   }
@@ -212,6 +213,11 @@ export async function startAgentRun(
   } catch (error) {
     return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };
   }
+}
+
+/** Where a run's worktree is kept while the run works; gone once it is removed. */
+function worktreeOf(runId: string): string {
+  return path.join(runsDir(), `${runId}.worktree`);
 }
 
 /** Stories whose sprint status is done: their failed runs are superseded. */
@@ -429,6 +435,7 @@ export async function getAgentRunChanges(
       checkout: access.data.localPath,
       branch: run.branch,
       baseBranch: run.baseBranch,
+      worktree: worktreeOf(run.id),
     });
     return {
       success: true,
@@ -501,6 +508,7 @@ export async function getAgentRunFileDiff(
       checkout: access.data.localPath,
       branch: run.branch,
       baseBranch: run.baseBranch,
+      worktree: worktreeOf(run.id),
       path: parsed.data.path,
     });
     return { success: true, data: diff };
@@ -738,7 +746,7 @@ export async function stopAutorunner(
     if (!state || state.repoKey !== access.data.repoKey || state.userId !== access.data.userId) {
       return { success: false, error: "Autorunner not found", code: "NOT_FOUND" };
     }
-    // "Stop nu" also ends the stories that are running; the driver then sees them cancelled.
+    // "Stop now" also ends the stories that are running; the driver then sees them cancelled.
     if (parsed.data.now) {
       for (const story of state.active) {
         await stopRun(story.runId, access.data);

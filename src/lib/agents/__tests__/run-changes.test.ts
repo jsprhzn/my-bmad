@@ -1,6 +1,49 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { groupOf, parseChanges } from "../run-changes";
+import { groupOf, parseChanges, runChanges, runFileDiff } from "../run-changes";
 import { parseUnifiedDiff } from "../unified-diff";
+
+describe("a running build's worktree", () => {
+  it("shows uncommitted and untracked changes, not only the branch's commits", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "run-changes-"));
+    const git = (...args: string[]) => execFileSync("git", ["-C", dir, ...args], { stdio: "pipe" }).toString();
+    git("init", "-q", "-b", "main");
+    git("config", "user.email", "test@example.com");
+    git("config", "user.name", "Test");
+    writeFileSync(path.join(dir, "a.txt"), "one\n");
+    git("add", ".");
+    git("commit", "-q", "-m", "base");
+    // The build has not committed yet: a tracked edit and a new file.
+    writeFileSync(path.join(dir, "a.txt"), "one\ntwo\n");
+    writeFileSync(path.join(dir, "new.ts"), "export const x = 1;\n");
+
+    const changes = await runChanges({
+      checkout: dir,
+      branch: "agent/4.1d-1-abc",
+      baseBranch: "main",
+      worktree: dir,
+    });
+    expect(changes).toEqual({
+      state: "ready",
+      files: [
+        { path: "a.txt", status: "modified", additions: 1, deletions: 0, group: "code" },
+        { path: "new.ts", status: "added", additions: null, deletions: null, group: "code" },
+      ],
+    });
+
+    const diff = await runFileDiff({
+      checkout: dir,
+      branch: "agent/4.1d-1-abc",
+      baseBranch: "main",
+      worktree: dir,
+      path: "new.ts",
+    });
+    expect(diff).toContain("+export const x = 1;");
+  });
+});
 
 describe("parseUnifiedDiff", () => {
   it("numbers the lines of each hunk and drops the file header", () => {

@@ -112,7 +112,7 @@ export function AutorunnerStoryRow({
             {story.number} · {story.title}
           </p>
           <p className="text-xs text-muted-foreground">
-            {phaseLabel} · gestart {formatTime(story.startedAt)}
+            {phaseLabel} · started {formatTime(story.startedAt)}
             {story.paused && " · gepauzeerd"}
           </p>
         </div>
@@ -171,7 +171,7 @@ export function AutorunnerStoryRow({
 
       <div className="flex flex-wrap justify-between gap-2">
         <Button variant="outline" size="sm" onClick={() => setLogOpen(true)}>
-          Volledige log…
+          Full log…
         </Button>
         <div className="flex gap-2">
           <Button

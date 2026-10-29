@@ -106,8 +106,8 @@ export function AgentRunView({ owner, repo, initial }: AgentRunViewProps) {
             {run.status === "running" && (
               <span
                 role="status"
-                aria-label="Bezig"
-                title="Bezig"
+                aria-label="Running"
+                title="Running"
                 className="size-2 animate-pulse rounded-full bg-success"
               />
             )}
