@@ -38,6 +38,8 @@ export function canStart(status: string): boolean {
 export const MAX_PARALLEL = 3;
 /** A story that keeps hitting the token limit is given up after this many tries. */
 export const MAX_ATTEMPTS = 6;
+/** A story whose build failed is tried again before new stories, until it has failed this many times. */
+export const MAX_FAILED_BUILDS = 2;
 const FALLBACK_WAIT_MS = 30 * 60 * 1000;
 const RESET_MARGIN_MS = 60 * 1000;
 
@@ -89,6 +91,64 @@ export function nextStories(input: {
     taken.push(story.number);
   }
   return picked;
+}
+
+/** Story numbers whose build run failed and that may still be tried again, in order of first failure. */
+export function failedBuildStories(runs: { kind: string; status: string; storyId: string }[]): string[] {
+  const failures = new Map<string, number>();
+  for (const run of runs) {
+    if (run.kind !== "dev" || run.status !== "failed") continue;
+    failures.set(run.storyId, (failures.get(run.storyId) ?? 0) + 1);
+  }
+  return [...failures].filter(([, count]) => count < MAX_FAILED_BUILDS).map(([number]) => number);
+}
+
+/** The stories with a failed build first, in that order; the rest keep file order. */
+export function retryFirst(stories: QueueStory[], failed: string[]): QueueStory[] {
+  const rank = (number: string) => {
+    const index = failed.indexOf(number);
+    return index === -1 ? failed.length : index;
+  };
+  return [...stories].sort((a, b) => rank(a.number) - rank(b.number));
+}
+
+export interface DecisionInput {
+  /** The failure that stops the queue, when there is one. */
+  failure: string | null;
+  throttled: boolean;
+  limited: boolean;
+  /** Share of the plan's limit in use, or null when unknown. */
+  load: number | null;
+  allowance: number;
+  mode: "serial" | "parallel";
+  /** Runs in flight: their keys, whether the story is large, and whether it is a retry. */
+  active: { key: string; large: boolean; retry: boolean }[];
+  /** Open stories not running now. */
+  openLeft: number;
+  /** ISO time the next retry is due, when the queue waits with nothing running. */
+  waitingAt: string | null;
+}
+
+/** The one line the autorunner shows: what it is doing and why it runs that many at once. */
+export function decisionNote(input: DecisionInput): string | null {
+  if (input.failure) return input.failure;
+  const pct = input.load === null ? null : Math.round(input.load * 100);
+  if (input.throttled) return `Tokens op (${pct ?? 100}%): geen nieuwe run tot er weer ruimte is.`;
+  if (input.active.length === 0 && input.waitingAt) return `Wacht op de tokenlimiet; verder om ${input.waitingAt}.`;
+  if (input.active.length === 0) return null;
+  const why: string[] = [];
+  const retries = input.active.filter((a) => a.retry).map((a) => a.key);
+  if (retries.length > 0) why.push(`eerst opnieuw: ${retries.join(", ")}`);
+  const large = input.active.filter((a) => a.large).map((a) => a.key);
+  if (large.length > 0) why.push(`groot: ${large.join(", ")}`);
+  if (input.limited) why.push(`tokens bijna op (${pct}%), max ${input.allowance} tegelijk`);
+  else if (input.mode === "serial") why.push("serieel ingesteld");
+  else if (pct !== null) why.push(`tokens op ${pct}%`);
+  if (input.active.length < input.allowance && input.openLeft > input.active.length) {
+    why.push("de overige open stories wachten op afhankelijkheden");
+  }
+  const count = `${input.active.length} ${input.active.length === 1 ? "run" : "runs"}`;
+  return why.length > 0 ? `${count}: ${why.join("; ")}.` : `${count}.`;
 }
 
 /** Output that means the account hit a limit that resets on its own. */

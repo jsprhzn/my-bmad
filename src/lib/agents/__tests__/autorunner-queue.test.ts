@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { parseStoryDependencies } from "@/lib/bmad/story-graph";
 import {
+  decisionNote,
+  failedBuildStories,
   isTemporaryLimit,
   nextStories,
   readSprintStories,
   retryAt,
+  retryFirst,
 } from "../autorunner-queue";
 
 const SPRINT = `
@@ -81,6 +84,80 @@ describe("nextStories", () => {
     const partial = stories.filter((s) => s.number !== "1.1");
     const picked = nextStories({ stories: partial, graph: GRAPH, busy: new Set(), slots: 3 });
     expect(picked).toEqual([]);
+  });
+});
+
+describe("failed builds", () => {
+  const stories = readSprintStories(SPRINT);
+  const run = (storyId: string, status: string, kind = "dev") => ({ kind, status, storyId });
+
+  it("finds the stories whose build failed, and leaves out a story that failed twice", () => {
+    const runs = [run("1.4", "failed"), run("1.2", "completed"), run("1.3", "failed"), run("1.3", "failed")];
+    expect(failedBuildStories(runs)).toEqual(["1.4"]);
+  });
+
+  it("ignores failed runs that are not builds", () => {
+    expect(failedBuildStories([run("1.3", "failed", "review")])).toEqual([]);
+  });
+
+  it("puts a story with a failed build before new stories", () => {
+    const ordered = retryFirst(stories, ["1.3"]);
+    expect(ordered.map((s) => s.number)).toEqual(["1.3", "1.1", "1.2", "1.4", "2.1"]);
+  });
+
+  it("retries a failed story before a new one, but still skips one that is not open", () => {
+    const done = stories.map((s) => (s.number === "1.2" ? { ...s, status: "done" } : s));
+    const ordered = retryFirst(done, ["1.3", "1.1"]);
+    const picked = nextStories({ stories: ordered, graph: GRAPH, busy: new Set(), slots: 2 });
+    // 1.1 is done, so it is not retried; 1.3 is open and its needs are done, and 1.4 and 2.1 need 1.3.
+    expect(picked.map((s) => s.number)).toEqual(["1.3"]);
+  });
+});
+
+describe("decisionNote", () => {
+  const base = {
+    failure: null,
+    throttled: false,
+    limited: false,
+    load: 0.3,
+    allowance: 3,
+    mode: "parallel" as const,
+    active: [],
+    openLeft: 0,
+    waitingAt: null,
+  };
+
+  it("says why it runs two stories at once: both are large", () => {
+    const note = decisionNote({
+      ...base,
+      active: [
+        { key: "8-3", large: true, retry: false },
+        { key: "4-1d", large: true, retry: false },
+      ],
+    });
+    expect(note).toBe("2 runs: groot: 8-3, 4-1d; tokens op 30%.");
+  });
+
+  it("says when tokens are nearly used up", () => {
+    const note = decisionNote({
+      ...base,
+      limited: true,
+      load: 0.8,
+      allowance: 2,
+      active: [{ key: "8-3", large: false, retry: false }],
+      openLeft: 3,
+    });
+    expect(note).toBe("1 run: tokens bijna op (80%), max 2 tegelijk; de overige open stories wachten op afhankelijkheden.");
+  });
+
+  it("says when a failed story is tried again first", () => {
+    const note = decisionNote({ ...base, active: [{ key: "8-2", large: false, retry: true }] });
+    expect(note).toBe("1 run: eerst opnieuw: 8-2; tokens op 30%.");
+  });
+
+  it("says when it waits for the token limit with nothing running", () => {
+    const note = decisionNote({ ...base, active: [], waitingAt: "12:30" });
+    expect(note).toBe("Wacht op de tokenlimiet; verder om 12:30.");
   });
 });
 

@@ -2,7 +2,7 @@
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readdir } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
@@ -40,6 +40,7 @@ import {
   autorunnerFile,
   listAutorunners,
   readAutorunner,
+  readSprintStories,
   writeAutorunner,
   type AutorunnerState,
 } from "@/lib/agents/autorunner-queue";
@@ -213,9 +214,20 @@ export async function startAgentRun(
   }
 }
 
+/** Stories whose sprint status is done: their failed runs are superseded. */
+async function doneStories(localPath: string): Promise<Set<string>> {
+  const file = path.join(localPath, "_bmad-output/implementation-artifacts/sprint-status.yaml");
+  const content = existsSync(file) ? await readFile(file, "utf8") : "";
+  return new Set(
+    readSprintStories(content)
+      .filter((story) => story.status === "done")
+      .map((story) => story.number),
+  );
+}
+
 export async function listAgentRuns(
   input: z.infer<typeof listSchema>,
-): Promise<ActionResult<AgentRun[]>> {
+): Promise<ActionResult<(AgentRun & { storyDone: boolean })[]>> {
   const parsed = listSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, error: "Invalid data", code: "VALIDATION_ERROR" };
@@ -228,7 +240,9 @@ export async function listAgentRuns(
       userId: access.data.userId,
       storyId: parsed.data.storyId,
     });
-    if (!parsed.data.withoutAutorun) return { success: true, data: runs };
+    const done = await doneStories(access.data.localPath);
+    const marked = runs.map((run) => ({ ...run, storyDone: done.has(run.storyId) }));
+    if (!parsed.data.withoutAutorun) return { success: true, data: marked };
     const queued = new Set(
       (await listAutorunners(access.data.repoKey, access.data.userId)).flatMap((state) =>
         state.active.map((story) => story.runId),
@@ -236,7 +250,7 @@ export async function listAgentRuns(
     );
     return {
       success: true,
-      data: runs.filter((run) => !(run.status === "running" && queued.has(run.id))),
+      data: marked.filter((run) => !(run.status === "running" && queued.has(run.id))),
     };
   } catch (error) {
     return { success: false, error: sanitizeError(error, "AGENT_ERROR"), code: "AGENT_ERROR" };

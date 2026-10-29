@@ -10,10 +10,13 @@ import {
   MAX_ATTEMPTS,
   MAX_PARALLEL,
   canStart,
+  decisionNote,
+  failedBuildStories,
   nextStories,
   readAutorunner,
   readSprintStories,
   retryAt,
+  retryFirst,
   isTemporaryLimit,
   writeAutorunner,
   type ActiveStory,
@@ -65,6 +68,7 @@ export async function runAutorunner(file: string): Promise<void> {
     let project = await readProject(state.localPath);
     const runs = await listRuns({ repoKey: state.repoKey, userId: state.userId });
     const runById = new Map(runs.map((r) => [r.id, r]));
+    const failedIds = failedBuildStories(runs);
     const now = new Date();
     // Runs this tick starts; saved with the state so the queue can total their tokens and cost.
     const started: string[] = [];
@@ -195,7 +199,9 @@ export async function runAutorunner(file: string): Promise<void> {
         busy.add(story.number);
         free -= 1;
       }
-      const fresh = nextStories({ stories: project.stories, graph: project.graph, busy, slots: free });
+      // Stories whose build failed go before new ones; nextStories still skips any that are not open.
+      const ordered = retryFirst(project.stories, failedIds);
+      const fresh = nextStories({ stories: ordered, graph: project.graph, busy, slots: free });
       for (const story of fresh) {
         // A large story is split into subtasks first; the subtasks are built, not the story itself.
         const alreadySplit = state.split ?? [];
@@ -264,17 +270,21 @@ export async function runAutorunner(file: string): Promise<void> {
       waiting: pending,
       done: state.done,
       runIds: [...state.runIds, ...started],
-      note:
-        failNote ??
-        (throttled
-          ? `Token budget full (${Math.round((load ?? 1) * 100)}%); waiting until there is room again.`
-          : null) ??
-        (limited && active.length >= allowance && openLeft.length > active.length
-          ? `Tokens nearly used up (${Math.round((load ?? 0) * 100)}%): ${active.length} of at most ${allowance} runs running, so no new one starts now.`
-          : null) ??
-        (pending.length > 0 && active.length === 0
-          ? `Waiting for the token limit; continuing at ${new Date(nextWait).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}.`
-          : null),
+      note: decisionNote({
+        failure: failNote,
+        throttled,
+        limited,
+        load,
+        allowance,
+        mode: state.mode,
+        active: active.map((a) => ({
+          key: a.key,
+          large: LARGE_COMPLEXITY.has(project.advice.get(a.number)?.complexity ?? ""),
+          retry: failedIds.includes(a.number),
+        })),
+        openLeft: openLeft.length,
+        waitingAt: pending.length > 0 ? new Date(nextWait).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }) : null,
+      }),
       driverPid: process.pid,
     });
     await sleep(TICK_MS);

@@ -48,6 +48,8 @@ export interface AgentRun {
   outputTokens?: number | null;
   numTurns: number | null;
   error: string | null;
+  /** A note added afterwards, e.g. that the story's work landed another way. */
+  note?: string | null;
   /** The run this one answers; its log comes before this run's log. */
   parentRunId?: string | null;
   /** Paused with SIGSTOP; resumed with SIGCONT. */
