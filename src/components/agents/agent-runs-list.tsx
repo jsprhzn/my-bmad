@@ -31,7 +31,7 @@ const MODEL_BADGE: Record<string, string> = {
 
 /** Agent runs of one project, live: the running ones first, finished ones on request. */
 export function AgentRunsList({ owner, repo }: { owner: string; repo: string }) {
-  const [runs, setRuns] = useState<AgentRun[] | null>(null);
+  const [runs, setRuns] = useState<(AgentRun & { storyDone: boolean })[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showFinished, setShowFinished] = useState(false);
   const [changesRun, setChangesRun] = useState<AgentRun | null>(null);
@@ -80,7 +80,9 @@ export function AgentRunsList({ owner, repo }: { owner: string; repo: string }) 
     });
     if (result.success) {
       const updated = result.data;
-      setRuns((prev) => prev && prev.map((r) => (r.id === updated.id ? updated : r)));
+      setRuns((prev) =>
+        prev && prev.map((r) => (r.id === updated.id ? { ...updated, storyDone: r.storyDone } : r)),
+      );
     } else {
       setControlError(result.error);
     }
@@ -90,8 +92,10 @@ export function AgentRunsList({ owner, repo }: { owner: string; repo: string }) 
   if (runs === null) return <p className="text-sm text-muted-foreground">Loading…</p>;
 
   const runningCount = runs.filter((run) => run.status === "running").length;
-  // "Show finished" reveals the completed runs; failed runs stay visible either way.
-  const visible = showFinished ? runs : runs.filter((run) => run.status !== "completed");
+  // "Show finished" reveals the completed runs and the failed ones whose story is done since.
+  const visible = showFinished
+    ? runs
+    : runs.filter((run) => run.status !== "completed" && !(run.status === "failed" && run.storyDone));
   const projectPath = `/repo/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
 
   return (
