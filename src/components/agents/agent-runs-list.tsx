@@ -22,6 +22,14 @@ const RUNS_POLL_MS = 10000;
 /** Running times are redrawn this often. */
 const CLOCK_MS = 15000;
 
+/** Run kind as a badge: one colour per kind, so the row shows at a glance what it did. */
+const KIND_BADGE: Record<string, string> = {
+  brainstorm: "border-fuchsia-500/40 text-fuchsia-400",
+  plan: "border-blue-500/40 text-blue-400",
+  dev: "border-teal-500/40 text-teal-400",
+  review: "border-indigo-500/40 text-indigo-400",
+};
+
 /** Model as a badge: one colour per tier. */
 const MODEL_BADGE: Record<string, string> = {
   haiku: "border-emerald-500/40 text-emerald-400",
@@ -148,13 +156,15 @@ export function AgentRunsList({ owner, repo }: { owner: string; repo: string }) 
                       {run.storyId}: {run.storyTitle}
                     </p>
                     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                      <span>{AGENT_RUN_LABELS[run.kind]}</span>
+                      <Badge variant="outline" className={KIND_BADGE[run.kind] ?? ""}>
+                        {AGENT_RUN_LABELS[run.kind]}
+                      </Badge>
                       {run.skill && <span>· /{run.skill}</span>}
                       <Badge variant="outline" className={MODEL_BADGE[run.model] ?? ""}>
                         {run.model}
                       </Badge>
                       <span>
-                        · gestart {formatTime(run.startedAt)}
+                        · started {formatTime(run.startedAt)}
                         {run.endedAt
                           ? ` · duur ${formatDuration(Date.parse(run.endedAt) - Date.parse(run.startedAt))}`
                           : ` · loopt ${formatDuration(now - Date.parse(run.startedAt))}`}

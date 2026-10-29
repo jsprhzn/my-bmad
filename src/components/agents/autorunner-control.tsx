@@ -49,7 +49,7 @@ const STATUS_LABELS: Record<AutorunnerView["status"], string> = {
 function RunnerHistory({ views }: { views: AutorunnerView[] }) {
   return (
     <div className="space-y-1 text-sm">
-      <p className="font-medium">Laatst autorun</p>
+      <p className="font-medium">Last autorun</p>
       <ul className="space-y-1 text-muted-foreground">
         {views.map((view) => {
           const duration = Date.parse(view.endedAt ?? view.startedAt) - Date.parse(view.startedAt);

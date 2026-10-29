@@ -83,7 +83,7 @@ export async function runAutorunner(file: string): Promise<void> {
         active.push(story);
         continue;
       }
-      // Stopped on purpose ("Stop nu"): neither done nor a failure.
+      // Stopped on purpose ("Stop now"): neither done nor a failure.
       // Stopped by hand: the queue does not take the story up again.
       if (run.status === "cancelled") {
         if (!state.skipped.includes(story.number)) state.skipped.push(story.number);
@@ -98,7 +98,7 @@ export async function runAutorunner(file: string): Promise<void> {
             continue;
           }
           if (await buildBlocked(run, story)) {
-            failure = `${story.key}: de build is geblokkeerd.`;
+            failure = `${story.key}: the build is blocked.`;
             continue;
           }
           const runId = await startStoryRun(started, state, account, "review", story, project, reviewSkill, {
@@ -373,7 +373,7 @@ async function startStoryRun(
 
 /** What a continued run is told: the limit has reset, so pick up where it stopped. */
 const CONTINUE_PROMPT =
-  "Ga verder waar je gebleven bent. Rond de taak af en leg alle wijzigingen vast met git commit.";
+  "Pick up where you left off. Finish the task and commit all changes with git commit.";
 
 /** "1-2-sign-up-and-sign-in" → "sign up and sign in", for the prompt. */
 function titleFromKey(key: string): string {

@@ -13,10 +13,10 @@ export type StageId = "brainstorm" | "plan" | "build" | "test" | "review";
 export const STAGE_ORDER: StageId[] = ["brainstorm", "plan", "build", "test", "review"];
 
 export const STAGE_LABELS: Record<StageId, string> = {
-  brainstorm: "Brainstormen",
+  brainstorm: "Brainstorm",
   plan: "Plan",
-  build: "Bouwen",
-  test: "Testen",
+  build: "Build",
+  test: "Test",
   review: "Review",
 };
 

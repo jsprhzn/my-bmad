@@ -300,7 +300,7 @@ export function RunChangesSheet({
 
           {artifact === null && loaded?.state === "ready" && selected === null && (
             <>
-              <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Wijzigingen</h3>
+              <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Changes</h3>
               <div className="flex flex-wrap gap-2">
                 {(Object.keys(FILTER_LABELS) as Filter[]).map((key) => {
                   const count = key === "all" ? loaded.files.length : counts(key);

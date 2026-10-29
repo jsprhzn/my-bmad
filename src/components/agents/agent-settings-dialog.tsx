@@ -85,7 +85,7 @@ export function AgentSettingsDialog({ owner, name, autorunner, oneAtATime }: Age
             <span>
               <span className="font-medium">Autorunner</span>
               <span className="block text-muted-foreground">
-                Claude beslist per actie zelf (auto mode). Uit: runs draaien zonder vragen (bypassPermissions).
+                Claude decides per action itself (auto mode). Off: runs go without asking (bypassPermissions).
               </span>
             </span>
           </label>

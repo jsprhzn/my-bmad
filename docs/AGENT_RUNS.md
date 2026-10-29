@@ -53,7 +53,7 @@ When that rebase hits a conflict, an agent resolves it in the worktree, with the
 
 ## Autorunner
 
-The **Autorunner starten** button above the stories board and above the agent runs starts a queue. It takes open stories (backlog or ready-for-dev) whose dependencies are done, from `story-dependencies.yaml`, and runs each build in auto mode, then a review if that is on. Pick **Een voor een** (one at a time) or **Parallel (max 3)**.
+The **Start autorunner** button above the stories board and above the agent runs starts a queue. It takes open stories (backlog or ready-for-dev) whose dependencies are done, from `story-dependencies.yaml`, and runs each build in auto mode, then a review if that is on. Pick **One at a time** or **Parallel (max 3)**.
 
 - It stops when a story fails, or when a story is blocked in sprint-status. Stories already running finish.
 - When the Claude account hits its token limit, the queue waits until the limit resets (from Claude's message, or 30 minutes when there is none) and runs that step again, up to six times.
