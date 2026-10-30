@@ -201,4 +201,24 @@ describe("token limit", () => {
     const now = new Date("2026-10-28T10:00:00Z");
     expect(retryAt("rate limit", now).toISOString()).toBe("2026-10-28T10:30:00.000Z");
   });
+
+  it("recognises the five-hour limit message", () => {
+    expect(isTemporaryLimit("You've hit your 5-hour limit · resets 1:50pm (Europe/Amsterdam)")).toBe(true);
+  });
+
+  it("reads a reset time of the day in the zone it names", () => {
+    // 1:50pm in Amsterdam on 30 October 2026 is 12:50 UTC (CET, after the clocks went back).
+    const now = new Date("2026-10-30T10:36:38Z");
+    const text = "You've hit your 5-hour limit · resets 1:50pm (Europe/Amsterdam)";
+    expect(retryAt(text, now).toISOString()).toBe("2026-10-30T12:51:00.000Z");
+  });
+
+  it("reads a reset date and time, and moves a passed time to the next day", () => {
+    const text = "usage limit · resets Nov 2 at 4am (Europe/Amsterdam)";
+    expect(retryAt(text, new Date("2026-10-30T10:00:00Z")).toISOString()).toBe("2026-11-02T03:01:00.000Z");
+    const later = new Date("2026-10-30T13:00:00Z");
+    expect(retryAt("You've hit your 5-hour limit · resets 1:50pm (Europe/Amsterdam)", later).toISOString()).toBe(
+      "2026-10-31T12:51:00.000Z",
+    );
+  });
 });

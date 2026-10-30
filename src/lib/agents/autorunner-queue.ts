@@ -153,15 +153,19 @@ export function decisionNote(input: DecisionInput): string | null {
 }
 
 /** Output that means the account hit a limit that resets on its own. */
-const TEMPORARY_LIMIT = /usage limit|rate limit|rate_limit|overloaded|\b429\b|\b529\b/i;
+const TEMPORARY_LIMIT = /usage limit|hit your [^\n]*limit|rate limit|rate_limit|overloaded|\b429\b|\b529\b/i;
 
 export function isTemporaryLimit(text: string): boolean {
   return TEMPORARY_LIMIT.test(text);
 }
 
+/** "resets 1:50pm (Europe/Amsterdam)" or "resets Nov 2 at 4am (Europe/Amsterdam)", as Claude Code writes it. */
+const RESET_TEXT = /resets (?:([A-Za-z]{3,9}) (\d{1,2}) at )?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*\(([^)]+)\)/i;
+
 /**
  * When to try again after a limit. Claude Code reports the reset as
- * "...limit reached|<unix seconds>"; without it, wait half an hour.
+ * "...limit reached|<unix seconds>" or as "resets 1:50pm (Europe/Amsterdam)";
+ * without either, wait half an hour.
  */
 export function retryAt(text: string, now: Date): Date {
   const reset = text.match(/reached\|(\d{9,11})/);
@@ -169,7 +173,73 @@ export function retryAt(text: string, now: Date): Date {
     const at = new Date(Number(reset[1]) * 1000 + RESET_MARGIN_MS);
     if (at.getTime() > now.getTime()) return at;
   }
+  const named = resetFromText(text, now);
+  if (named) return new Date(named.getTime() + RESET_MARGIN_MS);
   return new Date(now.getTime() + FALLBACK_WAIT_MS);
+}
+
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/** The next wall-clock time in the zone the message names, after now. */
+function resetFromText(text: string, now: Date): Date | null {
+  const match = text.match(RESET_TEXT);
+  if (!match) return null;
+  const [, month, day, hour, minute = "0", meridiem, zone] = match;
+  let hours = Number(hour) % 12;
+  if (meridiem.toLowerCase() === "pm") hours += 12;
+  try {
+    const today = zoneParts(now, zone);
+    if (month) {
+      const monthIndex = MONTHS.indexOf(month.slice(0, 3).toLowerCase());
+      if (monthIndex < 0) return null;
+      let at = zoneDate(today.year, monthIndex + 1, Number(day), hours, Number(minute), zone);
+      // A date that has already passed this year means next year.
+      if (at.getTime() <= now.getTime()) at = zoneDate(today.year + 1, monthIndex + 1, Number(day), hours, Number(minute), zone);
+      return at;
+    }
+    // A time that has already passed today means tomorrow.
+    let at = zoneDate(today.year, today.month, today.day, hours, Number(minute), zone);
+    if (at.getTime() <= now.getTime()) at = zoneDate(today.year, today.month, today.day + 1, hours, Number(minute), zone);
+    return at;
+  } catch {
+    return null;
+  }
+}
+
+/** The calendar date and clock of an instant in a time zone. */
+function zoneParts(instant: Date, zone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+  }).formatToParts(instant);
+  const value = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  return {
+    year: value("year"),
+    month: value("month"),
+    day: value("day"),
+    hour: value("hour"),
+    minute: value("minute"),
+    second: value("second"),
+  };
+}
+
+/** The instant at which a time zone's clock shows the given date and time. */
+function zoneDate(year: number, month: number, day: number, hour: number, minute: number, zone: string): Date {
+  const wall = Date.UTC(year, month - 1, day, hour, minute);
+  let at = wall;
+  // Two passes: the first guess can sit on the other side of a daylight-saving change.
+  for (let pass = 0; pass < 2; pass++) {
+    const p = zoneParts(new Date(at), zone);
+    const shown = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+    at = wall - (shown - at);
+  }
+  return new Date(at);
 }
 
 export type Phase = "split" | "build" | "review";
