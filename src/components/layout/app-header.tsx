@@ -87,11 +87,11 @@ export function AppHeader() {
       </nav>
       <AnimatedThemeToggler className="ml-auto rounded-full p-2 hover:bg-accent shrink-0" />
       <GitHubStarsButton
-        username="Huzen-Software"
+        username="jsprhzn"
         repo="my-bmad"
         variant="ghost"
         size="sm"
-        onClick={() => window.open("https://github.com/Huzen-Software/my-bmad", "_blank", "noopener,noreferrer")}
+        onClick={() => window.open("https://github.com/jsprhzn/my-bmad", "_blank", "noopener,noreferrer")}
       />
       <ScrollProgress />
     </header>

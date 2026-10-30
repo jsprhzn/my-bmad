@@ -68,6 +68,10 @@ story, and let an autorunner work through the backlog. The screenshots below are
 
 ![Dashboard with progress per epic](docs/fork-dashboard-dark.jpg)
 
+![Documentation index per epic](docs/documentation-overview-dark.jpg)
+
+![Documentation specs grouped by epic](docs/documentation-specs-dark.jpg)
+
 ---
 
 <img width="1720" alt="Screenshot 1" src="./docs/screen1.png" />
@@ -100,7 +104,7 @@ story, and let an autorunner work through the backlog. The screenshots below are
 > Full guide with all environment variables explained: **[docs/GETTING_STARTED.md](./docs/GETTING_STARTED.md)**
 
 ```bash
-git clone https://github.com/Huzen-Software/my-bmad.git
+git clone https://github.com/jsprhzn/my-bmad.git
 cd my-bmad
 pnpm install
 

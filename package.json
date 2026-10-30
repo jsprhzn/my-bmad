@@ -1,16 +1,16 @@
 {
   "name": "my-bmad",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A web dashboard to visualize and track BMAD (Breakthrough Method of Agile AI-Driven Development) projects from GitHub repositories.",
   "license": "MIT",
   "author": "Hichem (DevHDI)",
-  "homepage": "https://github.com/Huzen-Software/my-bmad",
+  "homepage": "https://github.com/jsprhzn/my-bmad",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Huzen-Software/my-bmad.git"
+    "url": "https://github.com/jsprhzn/my-bmad.git"
   },
   "bugs": {
-    "url": "https://github.com/Huzen-Software/my-bmad/issues"
+    "url": "https://github.com/jsprhzn/my-bmad/issues"
   },
   "keywords": [
     "bmad",
