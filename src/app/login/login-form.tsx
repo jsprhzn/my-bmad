@@ -143,7 +143,7 @@ export function LoginForm({ githubEnabled, registrationEnabled }: LoginFormProps
             ) : (
               <Mail className="mr-2 h-5 w-5" />
             )}
-            {isSignUp ? "S'inscrire" : "Se connecter"}
+            {isSignUp ? "Sign up" : "Sign in"}
           </Button>
         </form>
 
