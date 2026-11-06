@@ -29,12 +29,22 @@ export interface QueueStory {
 const OPEN = new Set(["backlog", "ready-for-dev"]);
 /** A story a failed or stopped run left in progress: picked up again, unless a run is still on it. */
 const LEFT_BEHIND = new Set(["in-progress"]);
+/** A story whose build is on the checkout but whose review never ran or never finished. */
+const AWAITING_REVIEW = new Set(["review"]);
 /** A need counts as met when it is done, or split: a split story is worked on through its subtasks. */
 const MET = new Set(["done", "split"]);
 
 /** Whether the queue may start this story: it is open, or a run left it in progress. */
 export function canStart(status: string): boolean {
   return OPEN.has(status) || LEFT_BEHIND.has(status);
+}
+
+/**
+ * Whether a story waits for a review: its build is in, its status is `review`, and no run holds it. Nothing else
+ * moves such a story on, and every story that needs it waits for `done`.
+ */
+export function awaitsReview(status: string): boolean {
+  return AWAITING_REVIEW.has(status);
 }
 
 export const MAX_PARALLEL = 3;
@@ -74,13 +84,16 @@ export function nextStories(input: {
   /** Story numbers that are already running, waiting or done. */
   busy: Set<string>;
   slots: number;
+  /** Which statuses may start; stories to build by default, `awaitsReview` for stories left in review. */
+  startable?: (status: string) => boolean;
 }): QueueStory[] {
+  const startable = input.startable ?? canStart;
   const statusOf = new Map(input.stories.map((s) => [s.number, s.status]));
   const taken: string[] = [...input.busy];
   const picked: QueueStory[] = [];
   for (const story of input.stories) {
     if (picked.length >= input.slots) break;
-    if (!canStart(story.status) || input.busy.has(story.number)) continue;
+    if (!startable(story.status) || input.busy.has(story.number)) continue;
     const needs = requiredStories(story.number, input.graph);
     // A need that is missing from sprint-status counts as not done: never start blind.
     if ([...needs].some((need) => !MET.has(statusOf.get(need) ?? ""))) continue;
@@ -137,6 +150,9 @@ export function decisionNote(input: DecisionInput): string | null {
   const pct = input.load === null ? null : Math.round(input.load * 100);
   if (input.throttled) return `Token budget at ${pct ?? 100}%: no new run until there is room again.`;
   if (input.active.length === 0 && input.waitingAt) return `Waiting for the token limit; continuing at ${input.waitingAt}.`;
+  if (input.active.length === 0 && input.openLeft > 0) {
+    return `Waiting: ${input.openLeft} open ${input.openLeft === 1 ? "story waits" : "stories wait"} on dependencies that are not done yet. The queue keeps running and starts them when they are free.`;
+  }
   if (input.active.length === 0) return null;
   const why: string[] = [];
   const retries = input.active.filter((a) => a.retry).map((a) => a.key);
@@ -253,6 +269,8 @@ export interface ActiveStory {
   models?: PlannedModels;
   /** For a review: the build run whose held branch it works on. */
   buildRunId?: string;
+  /** A review of a story that was left in `review` with no run on it: it must end with the story done. */
+  leftInReview?: boolean;
 }
 
 export interface WaitingStory {
@@ -266,6 +284,8 @@ export interface WaitingStory {
   buildRunId?: string;
   /** The run that hit the limit: the retry continues this run instead of starting a new one. */
   runId?: string;
+  /** Carried over from the review that hit the limit. */
+  leftInReview?: boolean;
 }
 
 export interface AutorunnerState {

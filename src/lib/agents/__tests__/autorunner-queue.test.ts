@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseStoryDependencies } from "@/lib/bmad/story-graph";
 import {
+  awaitsReview,
   decisionNote,
   failedBuildStories,
   isTemporaryLimit,
@@ -220,5 +221,42 @@ describe("token limit", () => {
     expect(retryAt("You've hit your 5-hour limit · resets 1:50pm (Europe/Amsterdam)", later).toISOString()).toBe(
       "2026-10-31T12:51:00.000Z",
     );
+  });
+});
+
+describe("stories left in review", () => {
+  const sprint = readSprintStories(`
+development_status:
+  1-1-scaffold: done
+  1-2-sign-in: review
+  1-3-first-admin: backlog
+  1-4-invite: backlog
+`);
+
+  it("is not picked up as a story to build", () => {
+    const picked = nextStories({ stories: sprint, graph: GRAPH, busy: new Set(), slots: 3 });
+    expect(picked.map((s) => s.number)).toEqual([]);
+  });
+
+  it("is picked up for a review when its needs are done", () => {
+    const picked = nextStories({
+      stories: sprint,
+      graph: GRAPH,
+      busy: new Set(),
+      slots: 3,
+      startable: awaitsReview,
+    });
+    expect(picked.map((s) => s.number)).toEqual(["1.2"]);
+  });
+
+  it("is not reviewed again while a run is on it", () => {
+    const picked = nextStories({
+      stories: sprint,
+      graph: GRAPH,
+      busy: new Set(["1.2"]),
+      slots: 3,
+      startable: awaitsReview,
+    });
+    expect(picked).toEqual([]);
   });
 });

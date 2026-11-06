@@ -9,6 +9,7 @@ import { findClaudeAccount, type ClaudeAccount } from "./accounts";
 import {
   MAX_ATTEMPTS,
   MAX_PARALLEL,
+  awaitsReview,
   canStart,
   decisionNote,
   failedBuildStories,
@@ -125,6 +126,10 @@ export async function runAutorunner(file: string): Promise<void> {
             continue;
           }
         }
+        if (story.leftInReview && (project.statusOf.get(story.number) ?? "unknown") !== "done") {
+          failure = `${story.key}: sprint-status says "${project.statusOf.get(story.number) ?? "unknown"}" after the review.`;
+          continue;
+        }
         if (!state.done.includes(story.number)) state.done.push(story.number);
         continue;
       }
@@ -144,6 +149,7 @@ export async function runAutorunner(file: string): Promise<void> {
           attempts,
           buildRunId: story.buildRunId,
           runId: story.runId,
+          leftInReview: story.leftInReview,
         });
         continue;
       }
@@ -194,10 +200,34 @@ export async function runAutorunner(file: string): Promise<void> {
           runId,
           models: plannedModels(project.advice.get(story.number)),
           buildRunId: retry.buildRunId,
+          leftInReview: retry.leftInReview,
         });
         waiting.splice(waiting.findIndex((w) => w.number === retry.number), 1);
         busy.add(story.number);
         free -= 1;
+      }
+      // A story left in review, with no run on it, goes first: its dependents wait for it to be done.
+      if (state.review) {
+        const reviewable = nextStories({
+          stories: project.stories,
+          graph: project.graph,
+          busy,
+          slots: free,
+          startable: awaitsReview,
+        });
+        for (const story of reviewable) {
+          const runId = await startStoryRun(started, state, account, "review", story, project, reviewSkill);
+          active.push({
+            key: story.key,
+            number: story.number,
+            phase: "review",
+            runId,
+            models: plannedModels(project.advice.get(story.number)),
+            leftInReview: true,
+          });
+          busy.add(story.number);
+          free -= 1;
+        }
       }
       // Stories whose build failed go before new ones; nextStories still skips any that are not open.
       const ordered = retryFirst(project.stories, failedIds);
@@ -240,10 +270,14 @@ export async function runAutorunner(file: string): Promise<void> {
     const failed = state.failed || failure !== null;
     const failNote = failure ?? (state.failed ? state.note : null);
     const pending = stopping ? [] : waiting;
-    const openLeft = project.stories.filter((s) => canStart(s.status));
+    const openLeft = project.stories.filter((s) => canStart(s.status) || (state.review && awaitsReview(s.status)));
     const nextWait = Math.min(...pending.map((w) => Date.parse(w.at)));
 
-    if (active.length === 0 && (stopping || pending.length === 0) && !(throttled && openLeft.length > 0)) {
+    // Stories that wait on a dependency are not a reason to stop: someone may finish or merge that dependency
+    // while the queue idles, and the Mac stays awake meanwhile. The queue ends when everything is done, on a
+    // failure or on a stop request.
+    const stillOpen = !stopping && openLeft.some((s) => !state.done.includes(s.number) && !state.skipped.includes(s.number));
+    if (active.length === 0 && (stopping || pending.length === 0) && !stillOpen) {
       const status = failed ? "failed" : "stopped";
       await finish(file, {
         status: failed || state.stopRequested || openLeft.length > 0 ? status : "completed",
