@@ -100,10 +100,12 @@ export function AgentRunsList({ owner, repo }: { owner: string; repo: string }) 
   if (runs === null) return <p className="text-sm text-muted-foreground">Loading…</p>;
 
   const runningCount = runs.filter((run) => run.status === "running").length;
-  // "Show finished" reveals the completed runs and the failed ones whose story is done since.
+  // "Show finished" reveals the completed runs and the failed or stopped ones whose story is done since.
   const visible = showFinished
     ? runs
-    : runs.filter((run) => run.status !== "completed" && !(run.status === "failed" && run.storyDone));
+    : runs.filter(
+        (run) => run.status !== "completed" && !((run.status === "failed" || run.status === "cancelled") && run.storyDone),
+      );
   const projectPath = `/repo/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
 
   return (
