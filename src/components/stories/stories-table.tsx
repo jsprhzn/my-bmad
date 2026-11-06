@@ -115,24 +115,36 @@ function storyHref(basePath: string, storyId: string) {
 /** A story row; a split story's subtasks hang under it as subRows. */
 type StoryRow = StoryDetail & { subRows?: StoryRow[] };
 
-/** "4.1a" → a subtask of "4.1". */
-const SUBTASK_ID = /^(\d+\.\d+)[a-z]$/;
+/** "4.1a" → a subtask of "4.1"; "11.3aa" → a subtask of "11.3a". */
+const SUBTASK_ID = /^(\d+\.\d+[a-z]*)[a-z]$/;
 
 /**
- * Nest the subtasks of a story under its row (4.1 → 4.1a, 4.1b, …), and count how many of them are done.
- * A subtask whose parent is not in the list shows as a row of its own.
+ * Nest the subtasks of a story under its row (4.1 → 4.1a, 4.1b, …; 11.3 → 11.3a → 11.3aa, …), and count how many
+ * of them are done. A split subtask (11.3a) is not counted itself: its own subtasks are, so a parent reads as
+ * done when all the work under it is done. A subtask whose parent is not in the list shows as a row of its own.
  */
 function buildRows(stories: StoryDetail[], lookup: StoryDetail[]) {
   // Every story that has subtasks, across the whole list, so the done count does not depend on filters.
-  const progress = new Map<string, { done: number; total: number }>();
+  const childIds = new Map<string, string[]>();
+  const statusById = new Map(lookup.map((s) => [s.id, s.status]));
   for (const story of lookup) {
     const parent = SUBTASK_ID.exec(story.id)?.[1];
     if (!parent) continue;
-    const count = progress.get(parent) ?? { done: 0, total: 0 };
-    count.total += 1;
-    if (story.status === "done") count.done += 1;
-    progress.set(parent, count);
+    childIds.set(parent, [...(childIds.get(parent) ?? []), story.id]);
   }
+  const leafCount = (id: string): { done: number; total: number } => {
+    const kids = childIds.get(id);
+    if (!kids) return { done: statusById.get(id) === "done" ? 1 : 0, total: 1 };
+    return kids.reduce(
+      (sum, kid) => {
+        const c = leafCount(kid);
+        return { done: sum.done + c.done, total: sum.total + c.total };
+      },
+      { done: 0, total: 0 },
+    );
+  };
+  const progress = new Map<string, { done: number; total: number }>();
+  for (const id of childIds.keys()) progress.set(id, leafCount(id));
 
   const storyIds = new Set(stories.map((s) => s.id));
   const children = new Map<string, StoryRow[]>();
@@ -209,7 +221,7 @@ function getColumns(
         const count = progress.get(row.original.id);
         return (
           <div className="flex items-center gap-2">
-            <StatusBadge status={row.getValue("status")} />
+            <StatusBadge status={row.getValue("status")} complete={!!count && count.done === count.total} />
             {count && (
               <span className="text-xs tabular-nums text-muted-foreground">
                 {count.done}/{count.total} done

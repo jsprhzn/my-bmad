@@ -44,10 +44,15 @@ const statusConfig: Record<string, { label: string; className: string }> = {
 interface StatusBadgeProps {
   status: StoryStatus | EpicStatus;
   compact?: boolean;
+  /** A split story whose subtasks are all done: shown green, still dashed and labelled Split. */
+  complete?: boolean;
 }
 
-export function StatusBadge({ status, compact }: StatusBadgeProps) {
-  const config = statusConfig[status] || statusConfig.unknown;
+export function StatusBadge({ status, compact, complete }: StatusBadgeProps) {
+  const config =
+    status === "split" && complete
+      ? { ...statusConfig.split, className: "bg-success/15 text-success-foreground border-dashed border-success/25" }
+      : statusConfig[status] || statusConfig.unknown;
   return (
     <Badge
       variant="outline"
