@@ -137,7 +137,7 @@ export interface DecisionInput {
   allowance: number;
   mode: "serial" | "parallel";
   /** Runs in flight: their keys, whether the story is large, and whether it is a retry. */
-  active: { key: string; large: boolean; retry: boolean }[];
+  active: { key: string; large: boolean; retry: boolean; repair?: boolean }[];
   /** Open stories not running now. */
   openLeft: number;
   /** ISO time the next retry is due, when the queue waits with nothing running. */
@@ -155,6 +155,8 @@ export function decisionNote(input: DecisionInput): string | null {
   }
   if (input.active.length === 0) return null;
   const why: string[] = [];
+  const repairs = input.active.filter((a) => a.repair).map((a) => a.key);
+  if (repairs.length > 0) why.push(`repairing: ${repairs.join(", ")}`);
   const retries = input.active.filter((a) => a.retry).map((a) => a.key);
   if (retries.length > 0) why.push(`retrying first: ${retries.join(", ")}`);
   const large = input.active.filter((a) => a.large).map((a) => a.key);
@@ -258,7 +260,93 @@ function zoneDate(year: number, month: number, day: number, hour: number, minute
   return new Date(at);
 }
 
-export type Phase = "split" | "build" | "review";
+export type Phase = "split" | "build" | "review" | "repair";
+
+/** A repair run's reason: what went wrong, and the run it went wrong in. */
+export interface RepairInfo {
+  message: string;
+  failedRunId?: string;
+}
+
+/** Something that went wrong for one story. The queue has an AI repair it when it can, and stops when it cannot. */
+export interface Problem {
+  number: string;
+  key: string;
+  phase: Phase;
+  message: string;
+  failedRunId?: string;
+  /** False for what an AI cannot fix: a limit that does not reset, or a repair that failed itself. */
+  repairable: boolean;
+}
+
+/** How many times a story is repaired before the queue gives up on it and stops. */
+export const MAX_REPAIRS = 2;
+
+/**
+ * What to do with the problems of one tick: queue a repair for each story that may still be repaired, and name the
+ * failure that stops the queue for the rest (the first one). A story with a repair already waiting is not queued twice.
+ */
+export function planRepairs(input: {
+  problems: Problem[];
+  repairs: Record<string, number> | undefined;
+  stopRequested: boolean;
+  waiting: WaitingStory[];
+  now: Date;
+}): { repairs: Record<string, number>; queue: WaitingStory[]; failure: string | null } {
+  const repairs = { ...(input.repairs ?? {}) };
+  const queue: WaitingStory[] = [];
+  let failure: string | null = null;
+  for (const problem of input.problems) {
+    const used = repairs[problem.number] ?? 0;
+    if (problem.repairable && !input.stopRequested && used < MAX_REPAIRS) {
+      if ([...input.waiting, ...queue].some((w) => w.number === problem.number)) continue;
+      repairs[problem.number] = used + 1;
+      queue.push({
+        key: problem.key,
+        number: problem.number,
+        phase: "repair",
+        at: input.now.toISOString(),
+        attempts: 0,
+        repair: { message: problem.message, failedRunId: problem.failedRunId },
+      });
+    } else if (failure === null) {
+      failure = problem.repairable ? `${problem.message} (still failing after ${MAX_REPAIRS} repairs)` : problem.message;
+    }
+  }
+  return { repairs, queue, failure };
+}
+
+/** What a repair run is told: the failure, where its logs are, and what state to leave the story in. */
+export function repairPrompt(input: {
+  number: string;
+  key: string;
+  info: RepairInfo;
+  runsDir: string;
+  attempt: number;
+}): string {
+  const files = input.info.failedRunId
+    ? [
+        `The failed run is ${input.info.failedRunId}. Its files are in ${input.runsDir}:`,
+        `- ${input.info.failedRunId}.jsonl: the agent's transcript`,
+        `- ${input.info.failedRunId}.stderr.log: its errors`,
+        `- ${input.info.failedRunId}.merge.txt: how the merge ended, and ${input.info.failedRunId}.conflict.log`,
+      ]
+    : [];
+  return [
+    `Story ${input.number} (${input.key}) went wrong in the MyBMAD autorunner. The queue wants it fixed, not stopped. Repair attempt ${input.attempt} of ${MAX_REPAIRS}.`,
+    "",
+    `What happened: ${input.info.message}`,
+    ...files,
+    "",
+    "Started from MyBMAD; nobody is watching to answer questions.",
+    "- Find the root cause first: read the logs above, the story's spec and the current state of the repository and sprint-status.yaml. Do not guess.",
+    "- Fix it in this repository so that the story can finish: code, tests, the spec or sprint-status.yaml.",
+    "- Do not make a failing test pass by deleting or weakening it, and do not skip a check.",
+    "- Leave the story in a status the queue can carry on from: \"in-progress\" when it must be built again, \"review\" when the build is complete and not reviewed yet, \"done\" when build and review are both complete. Never leave it \"blocked\".",
+    "- Commit all changes with git commit.",
+    "- If the cause is outside this repository (for example in the tool that runs you), say so in your final message and change nothing.",
+  ].join("\n");
+}
 
 export interface ActiveStory {
   key: string;
@@ -271,6 +359,8 @@ export interface ActiveStory {
   buildRunId?: string;
   /** A review of a story that was left in `review` with no run on it: it must end with the story done. */
   leftInReview?: boolean;
+  /** For a repair run: what it is repairing. */
+  repair?: RepairInfo;
 }
 
 export interface WaitingStory {
@@ -286,6 +376,8 @@ export interface WaitingStory {
   runId?: string;
   /** Carried over from the review that hit the limit. */
   leftInReview?: boolean;
+  /** For a repair: what it is repairing. A repair that is waiting for a slot starts when one is free. */
+  repair?: RepairInfo;
 }
 
 export interface AutorunnerState {
@@ -316,6 +408,8 @@ export interface AutorunnerState {
   splitLarge?: boolean;
   /** Large stories already split, or tried: they are built, not split again. */
   split?: string[];
+  /** Repairs started per story number, up to MAX_REPAIRS. */
+  repairs?: Record<string, number>;
   /** Every run the queue started, in order: its tokens and cost are summed from these. */
   runIds: string[];
   /** Why the queue is waiting, stopped or failed, for the UI. */

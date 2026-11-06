@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { parseStoryDependencies } from "@/lib/bmad/story-graph";
 import {
+  MAX_REPAIRS,
+  planRepairs,
+  repairPrompt,
+  type Problem,
   awaitsReview,
   decisionNote,
   failedBuildStories,
@@ -258,5 +262,90 @@ development_status:
       startable: awaitsReview,
     });
     expect(picked).toEqual([]);
+  });
+});
+
+describe("repairing what goes wrong", () => {
+  const now = new Date("2026-11-06T12:00:00Z");
+  const problem = (over: Partial<Problem> = {}): Problem => ({
+    number: "10.1b",
+    key: "10-1b-ledger",
+    phase: "review",
+    message: "10-1b-ledger: sprint-status says \"review\" after the review.",
+    failedRunId: "run-1",
+    repairable: true,
+    ...over,
+  });
+
+  it("queues a repair instead of stopping", () => {
+    const plan = planRepairs({ problems: [problem()], repairs: undefined, stopRequested: false, waiting: [], now });
+    expect(plan.failure).toBeNull();
+    expect(plan.repairs).toEqual({ "10.1b": 1 });
+    expect(plan.queue).toHaveLength(1);
+    expect(plan.queue[0]).toMatchObject({ number: "10.1b", phase: "repair", at: now.toISOString() });
+    expect(plan.queue[0].repair?.failedRunId).toBe("run-1");
+  });
+
+  it("stops after the story has been repaired the maximum number of times", () => {
+    const plan = planRepairs({
+      problems: [problem()],
+      repairs: { "10.1b": MAX_REPAIRS },
+      stopRequested: false,
+      waiting: [],
+      now,
+    });
+    expect(plan.queue).toEqual([]);
+    expect(plan.failure).toContain(`still failing after ${MAX_REPAIRS} repairs`);
+  });
+
+  it("stops for what an AI cannot repair, and when the user stopped the queue", () => {
+    const limit = planRepairs({ problems: [problem({ repairable: false })], repairs: {}, stopRequested: false, waiting: [], now });
+    expect(limit.queue).toEqual([]);
+    expect(limit.failure).toBe(problem().message);
+    const stopped = planRepairs({ problems: [problem()], repairs: {}, stopRequested: true, waiting: [], now });
+    expect(stopped.queue).toEqual([]);
+    expect(stopped.failure).not.toBeNull();
+  });
+
+  it("queues one repair per story, and keeps the first failure for the rest", () => {
+    const plan = planRepairs({
+      problems: [problem(), problem({ message: "again" }), problem({ number: "2.1", key: "2-1-x", repairable: false, message: "2-1-x: limit" })],
+      repairs: {},
+      stopRequested: false,
+      waiting: [],
+      now,
+    });
+    expect(plan.queue.map((w) => w.number)).toEqual(["10.1b"]);
+    expect(plan.failure).toBe("2-1-x: limit");
+  });
+
+  it("tells the repair the failure, the logs and the state to leave the story in", () => {
+    const prompt = repairPrompt({
+      number: "10.1b",
+      key: "10-1b-ledger",
+      info: { message: "boom", failedRunId: "run-1" },
+      runsDir: "/runs",
+      attempt: 1,
+    });
+    expect(prompt).toContain("boom");
+    expect(prompt).toContain("/runs");
+    expect(prompt).toContain("run-1.jsonl");
+    expect(prompt).toContain("Never leave it \"blocked\"");
+    expect(prompt).toContain(`attempt 1 of ${MAX_REPAIRS}`);
+  });
+
+  it("shows a repair in the queue's note", () => {
+    const note = decisionNote({
+      failure: null,
+      throttled: false,
+      limited: false,
+      load: null,
+      allowance: 3,
+      mode: "parallel",
+      active: [{ key: "10-1b-ledger", large: false, retry: false, repair: true }],
+      openLeft: 1,
+      waitingAt: null,
+    });
+    expect(note).toContain("repairing: 10-1b-ledger");
   });
 });

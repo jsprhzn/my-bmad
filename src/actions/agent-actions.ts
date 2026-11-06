@@ -567,7 +567,7 @@ export interface AutorunnerStoryView {
   key: string;
   number: string;
   title: string;
-  phase: "split" | "build" | "review";
+  phase: "split" | "build" | "review" | "repair";
   runId: string;
   /** The run whose changes the story shows: the build's own branch, also during its review. */
   changesRunId: string;

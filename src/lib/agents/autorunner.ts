@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseModelAdvice } from "../bmad/parse-model-advice";
 import { parseStoryDependencies, type StoryGraph } from "../bmad/story-graph";
-import type { ModelAdviceRow } from "../bmad/types";
+import type { ModelAdviceRow, ModelTier } from "../bmad/types";
 import { defaultSkillFor } from "./action-skills";
 import { findClaudeAccount, type ClaudeAccount } from "./accounts";
 import {
@@ -17,11 +17,14 @@ import {
   readAutorunner,
   readSprintStories,
   retryAt,
+  planRepairs,
+  repairPrompt,
   retryFirst,
   isTemporaryLimit,
   writeAutorunner,
   type ActiveStory,
   type AutorunnerState,
+  type Problem,
   type Phase,
   type QueueStory,
   type WaitingStory,
@@ -76,8 +79,26 @@ export async function runAutorunner(file: string): Promise<void> {
 
     // 1. Settle the runs that ended.
     const active: ActiveStory[] = [];
-    const waiting: WaitingStory[] = state.waiting.filter((w) => Date.parse(w.at) > now.getTime());
+    // Every waiting entry stays: the ones whose time has come start below, when a slot is free.
+    const waiting: WaitingStory[] = [...state.waiting];
     let failure: string | null = null;
+    // What went wrong, per story. An AI repairs it when it can; the queue stops when it cannot.
+    const problems: Problem[] = [];
+    const report = (
+      story: Pick<ActiveStory, "number" | "key" | "phase">,
+      run: AgentRun,
+      message: string,
+      repairable = true,
+    ) =>
+      problems.push({
+        number: story.number,
+        key: story.key,
+        phase: story.phase,
+        message: `${story.key}: ${message}`,
+        failedRunId: run.id,
+        // A repair that went wrong itself is not repaired again.
+        repairable: repairable && story.phase !== "repair",
+      });
     for (const story of state.active) {
       const run = runById.get(story.runId);
       if (!run || run.status === "running") {
@@ -91,15 +112,20 @@ export async function runAutorunner(file: string): Promise<void> {
         continue;
       }
       if (run.status === "completed") {
+        if (story.phase === "repair") {
+          // The story is picked up again from its sprint status: built, reviewed or left as done.
+          if (project.statusOf.get(story.number) === "blocked") report(story, run, "still blocked after the repair.", false);
+          continue;
+        }
         if (story.phase === "build" && run.held) {
           // The build's branch is kept: its review works on it and merges it, which sets the sprint status.
           const held = heldBranch(run);
           if (!held) {
-            failure = `${story.key}: the build has no branch to review.`;
+            report(story, run, "the build has no branch to review.");
             continue;
           }
           if (await buildBlocked(run, story)) {
-            failure = `${story.key}: the build is blocked.`;
+            report(story, run, "the build is blocked.");
             continue;
           }
           const runId = await startStoryRun(started, state, account, "review", story, project, reviewSkill, {
@@ -117,7 +143,7 @@ export async function runAutorunner(file: string): Promise<void> {
         if (story.phase === "build") {
           const sprint = project.statusOf.get(story.number) ?? "unknown";
           if (sprint === "blocked" || (sprint !== "review" && sprint !== "done")) {
-            failure = `${story.key}: sprint-status says "${sprint}" after the build.`;
+            report(story, run, `sprint-status says "${sprint}" after the build.`);
             continue;
           }
           if (state.review) {
@@ -127,7 +153,7 @@ export async function runAutorunner(file: string): Promise<void> {
           }
         }
         if (story.leftInReview && (project.statusOf.get(story.number) ?? "unknown") !== "done") {
-          failure = `${story.key}: sprint-status says "${project.statusOf.get(story.number) ?? "unknown"}" after the review.`;
+          report(story, run, `sprint-status says "${project.statusOf.get(story.number) ?? "unknown"}" after the review.`);
           continue;
         }
         if (!state.done.includes(story.number)) state.done.push(story.number);
@@ -138,7 +164,7 @@ export async function runAutorunner(file: string): Promise<void> {
       if (isTemporaryLimit(text)) {
         const attempts = (state.waiting.find((w) => w.number === story.number)?.attempts ?? 0) + 1;
         if (attempts > MAX_ATTEMPTS) {
-          failure = `${story.key}: still hitting the token limit after ${MAX_ATTEMPTS} tries.`;
+          report(story, run, `still hitting the token limit after ${MAX_ATTEMPTS} tries.`, false);
           continue;
         }
         waiting.push({
@@ -150,11 +176,22 @@ export async function runAutorunner(file: string): Promise<void> {
           buildRunId: story.buildRunId,
           runId: story.runId,
           leftInReview: story.leftInReview,
+          repair: story.repair,
         });
         continue;
       }
-      failure = `${story.key}: ${text.split("\n")[0] || "the run failed"}`;
+      report(story, run, text.split("\n")[0] || "the run failed");
     }
+    const plan = planRepairs({
+      problems,
+      repairs: state.repairs,
+      stopRequested: state.stopRequested,
+      waiting,
+      now,
+    });
+    state.repairs = plan.repairs;
+    waiting.push(...plan.queue);
+    failure = plan.failure;
 
     // 2. Start what the slots allow: retries that are due first, then new stories.
     const stopping = state.stopRequested || failure !== null;
@@ -185,8 +222,25 @@ export async function runAutorunner(file: string): Promise<void> {
           failure = `${retry.key}: the build's branch is gone; the review cannot start again.`;
           continue;
         }
-        const skill = retry.phase === "build" ? buildSkill : retry.phase === "split" ? splitSkill : reviewSkill;
-        const options = { hold: retry.phase === "build" && state.review, reuse: held };
+        const skill =
+          retry.phase === "build" || retry.phase === "repair" ? buildSkill : retry.phase === "split" ? splitSkill : reviewSkill;
+        const options: StartOptions = {
+          hold: retry.phase === "build" && state.review,
+          reuse: held,
+          // A repair starts from the failure, and uses the stronger of the story's models.
+          ...(retry.phase === "repair" && retry.repair
+            ? {
+                prompt: repairPrompt({
+                  number: story.number,
+                  key: story.key,
+                  info: retry.repair,
+                  runsDir: runsDir(),
+                  attempt: state.repairs?.[story.number] ?? 1,
+                }),
+                model: recommendedModel("review", project.advice.get(story.number)),
+              }
+            : {}),
+        };
         // A retry after a limit continues the same run; a new run only when that run has no session to continue.
         const start = (extra: { continueRunId?: string }) =>
           startStoryRun(started, state, account, retry.phase, story, project, skill, { ...options, ...extra });
@@ -201,6 +255,7 @@ export async function runAutorunner(file: string): Promise<void> {
           models: plannedModels(project.advice.get(story.number)),
           buildRunId: retry.buildRunId,
           leftInReview: retry.leftInReview,
+          repair: retry.repair,
         });
         waiting.splice(waiting.findIndex((w) => w.number === retry.number), 1);
         busy.add(story.number);
@@ -315,6 +370,7 @@ export async function runAutorunner(file: string): Promise<void> {
           key: a.key,
           large: LARGE_COMPLEXITY.has(project.advice.get(a.number)?.complexity ?? ""),
           retry: failedIds.includes(a.number),
+          repair: a.phase === "repair",
         })),
         openLeft: openLeft.length,
         waitingAt: pending.length > 0 ? new Date(nextWait).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }) : null,
@@ -361,6 +417,15 @@ async function buildBlocked(run: AgentRun, story: Pick<QueueStory, "key">): Prom
   return /^status: blocked/m.test(await readText(result));
 }
 
+/** What a run may be started with besides its phase. */
+interface StartOptions {
+  hold?: boolean;
+  reuse?: HeldBranch | null;
+  continueRunId?: string;
+  prompt?: string;
+  model?: ModelTier;
+}
+
 /** Start one build or review run for a story, in auto mode, and return its run id. */
 async function startStoryRun(
   started: string[],
@@ -370,9 +435,9 @@ async function startStoryRun(
   story: Pick<QueueStory, "number" | "key">,
   project: Project,
   skill: string,
-  options: { hold?: boolean; reuse?: HeldBranch | null; continueRunId?: string; prompt?: string } = {},
+  options: StartOptions = {},
 ): Promise<string> {
-  const kind: AgentRunKind = phase === "split" ? "plan" : phase === "build" ? "dev" : "review";
+  const kind: AgentRunKind = phase === "split" ? "plan" : phase === "build" || phase === "repair" ? "dev" : "review";
   const advice = project.advice.get(story.number);
   const sourcePath = path.join(IMPLEMENTATION, `spec-${story.key}.md`);
   const run = await startRun({
@@ -383,7 +448,7 @@ async function startStoryRun(
     storyTitle: titleFromKey(story.key),
     kind,
     skill,
-    model: recommendedModel(kind, advice),
+    model: options.model ?? recommendedModel(kind, advice),
     account,
     permissionMode: "auto",
     hold: options.hold,
