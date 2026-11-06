@@ -136,6 +136,36 @@ describe("agent run scripts", () => {
     expect(readFileSync(path.join(checkout, "leftover.txt"), "utf8")).toBe("unfinished\n");
   });
 
+  describe("story status after the merge", () => {
+    const IMPL = "_bmad-output/implementation-artifacts";
+
+    /** A run on 3.4 with a done spec under the given file name, and the status the run left in sprint-status. */
+    function statusAfterMerge(specFile: string, runStatus: string): string {
+      const worktree = storyWorktree();
+      writeFileSync(path.join(worktree, SPRINT), `development_status:\n  3-4-book-line: ${runStatus}\n`);
+      writeFileSync(path.join(worktree, IMPL, specFile), "---\nstatus: 'done'\n---\n");
+      git(worktree, "add", "-A");
+      git(worktree, "commit", "-q", "-m", "story");
+      const { result, script } = mergeFor(worktree, "true");
+      sh(script, "merge.sh");
+      expect(readFileSync(result, "utf8").trim()).toBe("merged");
+      return readFileSync(path.join(checkout, SPRINT), "utf8");
+    }
+
+    it("sets done when the spec is done", () => {
+      expect(statusAfterMerge("spec-3-4-book-line.md", "review")).toContain("3-4-book-line: done");
+    });
+
+    it("finds the spec when its name differs from the sprint key", () => {
+      // 10.1b: the key ends in "ageing" and the spec in "with-ageing".
+      expect(statusAfterMerge("spec-3-4-book-a-line-exactly-once.md", "review")).toContain("3-4-book-line: done");
+    });
+
+    it("keeps a status the run set to done", () => {
+      expect(statusAfterMerge("notes.md", "done")).toContain("3-4-book-line: done");
+    });
+  });
+
   it("does not merge when the agent leaves the conflict unresolved", () => {
     const worktree = storyWorktree();
     writeFileSync(path.join(worktree, "file.txt"), "story\n");

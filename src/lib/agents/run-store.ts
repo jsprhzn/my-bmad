@@ -269,8 +269,13 @@ export function mergeScript(p: {
     '  [ -n "$KEY" ] || return 0',
     // Only a result this run committed counts: an old blocked report must not block a later build.
     '  RES="$DIR/bmad-build-auto-result-$KEY.md"',
+    // The spec is named after the story's title, which can differ from the sprint key: fall back to the one spec
+    // that starts with the story's number. A status the run already set to done stays done.
+    '  SPEC="$DIR/spec-$KEY.md"',
+    '  if [ ! -f "$SPEC" ]; then set -- "$DIR"/spec-"$PREFIX"*.md; if [ $# -eq 1 ] && [ -f "$1" ]; then SPEC="$1"; fi; fi',
+    '  CUR=$(sed -n "s/^  $KEY: *//p" "$F" | head -n 1)',
     '  if [ -n "$(git -C "$WORKTREE" log --format= --name-only "$TARGET..HEAD" -- "$RES")" ] && grep -q "^status: blocked" "$RES" 2>/dev/null; then NEW=blocked',
-    '  elif grep -q "^status: .*done" "$DIR/spec-$KEY.md" 2>/dev/null; then NEW=done',
+    '  elif grep -q "^status: .*done" "$SPEC" 2>/dev/null || [ "$CUR" = done ]; then NEW=done',
     '  else NEW=review; fi',
     '  sed "s/^  $KEY: .*/  $KEY: $NEW/" "$F" > "$F.tmp" && mv "$F.tmp" "$F"',
     '  git -C "$WORKTREE" add -- "$SPRINT" && { git -C "$WORKTREE" diff --cached --quiet || git -C "$WORKTREE" commit -q -m "chore: set $KEY to $NEW in sprint-status"; }',
