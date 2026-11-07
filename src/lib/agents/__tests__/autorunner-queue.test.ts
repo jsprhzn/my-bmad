@@ -85,6 +85,13 @@ describe("nextStories", () => {
     expect(picked.map((s) => s.number)).toEqual(["1.4", "2.1"]);
   });
 
+  it("starts the stories that were waiting for a story this queue finished", () => {
+    // 1.2 is done and the queue finished it itself, so it is in `busy`: 1.3 may still start.
+    const done = stories.map((s) => (s.number === "1.2" ? { ...s, status: "done" } : s));
+    const picked = nextStories({ stories: done, graph: GRAPH, busy: new Set(["1.2"]), slots: 3 });
+    expect(picked.map((s) => s.number)).toEqual(["1.3"]);
+  });
+
   it("keeps a subtask's own number apart from its parent's", () => {
     const split = readSprintStories(
       "development_status:\n  6-3a-pain-001-xml: split\n  6-3aa-payment-storage: backlog\n  6-3ab-xsds: backlog\n",

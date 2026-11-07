@@ -89,7 +89,9 @@ export function nextStories(input: {
 }): QueueStory[] {
   const startable = input.startable ?? canStart;
   const statusOf = new Map(input.stories.map((s) => [s.number, s.status]));
-  const taken: string[] = [...input.busy];
+  // Only stories that are still in flight can clash with a pick. One the queue finished is in `busy` too, but its
+  // status is done: it must not hold back the stories that were waiting for it.
+  const taken: string[] = [...input.busy].filter((number) => !MET.has(statusOf.get(number) ?? ""));
   const picked: QueueStory[] = [];
   for (const story of input.stories) {
     if (picked.length >= input.slots) break;
